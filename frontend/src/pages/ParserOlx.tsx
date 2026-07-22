@@ -358,7 +358,7 @@ export function ParserOlx() {
             </div>
 
             <div className="flex flex-col gap-2 p-4 rounded-xl" style={{ backgroundColor: '#111827', color: '#9CA3AF', fontFamily: 'var(--font-family-mono)', height: '400px', overflowY: 'auto' }}>
-              <div className="text-xs" style={{ color: '#4B5563', marginBottom: '8px' }}>SYSTEM LOG</div>
+              <div className="text-xs" style={{ color: '#4B5563', marginBottom: '8px' }}>СИСТЕМНЫЙ ЖУРНАЛ</div>
               {logs.map((log, i) => (
                 <div key={i} className="text-sm">{log}</div>
               ))}
@@ -377,7 +377,7 @@ export function ParserOlx() {
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           <div className="card" style={{ width: '600px', maxWidth: '90vw' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Импорт Cookie (EditThisCookie)</h2>
+            <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Импорт файлов cookie (EditThisCookie)</h2>
             <p className="text-secondary text-sm" style={{ marginBottom: '16px' }}>
               Вставьте JSON-массив кукисов, скопированный из расширения EditThisCookie. Это позволит парсеру авторизоваться в OLX без запуска браузера, минуя защиту DataDome.
             </p>

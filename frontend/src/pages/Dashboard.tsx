@@ -18,11 +18,29 @@ interface StatsResponse {
   weekActivity: { day: string; sent: number; received: number }[];
 }
 
+const EMPTY_STATS: StatsResponse = {
+  totals: {
+    total: 0,
+    new_leads: 0,
+    ready_to_send: 0,
+    sent: 0,
+    invalid_number: 0,
+    failed: 0,
+    replied: 0,
+    interested: 0,
+    deals: 0,
+    refused: 0,
+  },
+  todayStats: { sent_today: 0 },
+  repliedToday: { replied_today: 0 },
+  weekActivity: [],
+};
+
 const STATUS_LABELS: Record<string, { label: string, color: string }> = {
   new_leads: { label: 'Новые', color: 'var(--color-text-secondary)' },
   ready_to_send: { label: 'Готовы к отправке', color: 'var(--color-info)' },
   sent: { label: 'Отправлено', color: 'var(--color-info)' },
-  invalid_number: { label: 'Нет в WA', color: 'var(--color-text-secondary)' },
+  invalid_number: { label: 'Нет в WhatsApp', color: 'var(--color-text-secondary)' },
   failed: { label: 'Ошибка', color: 'var(--color-error)' },
   replied: { label: 'Ответили', color: '#7C3AED' },
   interested: { label: 'Заинтересованы', color: 'var(--color-warning)' },
@@ -31,23 +49,41 @@ const STATUS_LABELS: Record<string, { label: string, color: string }> = {
 };
 
 export function Dashboard() {
-  const [data, setData] = useState<StatsResponse | null>(null);
+  const [data, setData] = useState<StatsResponse>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
-    fetch(`http://${window.location.hostname}:3001/api/leads/stats/dashboard`)
-      .then(r => r.json())
-      .then(d => {
-        setData(d);
+    const loadDashboard = async () => {
+      try {
+        const baseUrl = `http://${window.location.hostname}:3001`;
+        const healthResponse = await fetch(`${baseUrl}/api/health`);
+        if (!healthResponse.ok) throw new Error(`Сервер вернул HTTP ${healthResponse.status}`);
+
+        const health = await healthResponse.json() as { databaseConfigured?: boolean };
+        if (!health.databaseConfigured) {
+          setNotice('База данных пока не настроена. Интерфейс работает в ознакомительном режиме.');
+          setData(EMPTY_STATS);
+          return;
+        }
+
+        const statsResponse = await fetch(`${baseUrl}/api/leads/stats/dashboard`);
+        if (!statsResponse.ok) throw new Error(`Сервер вернул HTTP ${statsResponse.status}`);
+
+        setData(await statsResponse.json() as StatsResponse);
+      } catch (error) {
+        console.error('Не удалось загрузить аналитику:', error);
+        setNotice('Не удалось получить данные от сервера. Показана нулевая статистика.');
+        setData(EMPTY_STATS);
+      } finally {
         setLoading(false);
-      })
-      .catch(e => {
-        console.error(e);
-        setLoading(false);
-      });
+      }
+    };
+
+    void loadDashboard();
   }, []);
 
-  if (loading || !data) {
+  if (loading) {
     return <div className="p-8 text-secondary">Загрузка аналитики...</div>;
   }
 
@@ -57,7 +93,7 @@ export function Dashboard() {
   const repliedTdy = repliedToday?.replied_today || 0;
   const totalLeads = totals?.total || 0;
 
-  // Calculate overall conversion
+  // Общая конверсия за всё время
   const sentAllTime = totals?.sent || 0;
   const repliedAllTime = totals?.replied || 0;
   const conversion = sentAllTime > 0 ? ((repliedAllTime / sentAllTime) * 100).toFixed(1) : '0.0';
@@ -72,14 +108,19 @@ export function Dashboard() {
     <div className="flex flex-col h-full">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Dashboard</h1>
+          <h1 className="page-title">Главная</h1>
           <div className="text-secondary" style={{ marginTop: '4px' }}>Обзор активности LeadHunter</div>
         </div>
       </div>
 
       <div className="page-body flex flex-col gap-4 h-full overflow-hidden" style={{ minHeight: 0 }}>
+        {notice && (
+          <div className="card shrink-0" style={{ borderColor: '#F59E0B', background: '#FFFBEB', color: '#92400E' }}>
+            {notice}
+          </div>
+        )}
         
-        {/* Top Stats */}
+        {/* Основные показатели */}
         <div className="grid-4 shrink-0">
           <div className="card py-4">
             <span className="card-title text-sm">Отправлено сегодня 📤</span>
@@ -92,7 +133,7 @@ export function Dashboard() {
             <div className="text-secondary text-xs mt-1">лидов</div>
           </div>
           <div className="card py-4">
-            <span className="card-title text-sm">Конверсия (All-time) 🚀</span>
+            <span className="card-title text-sm">Конверсия за всё время 🚀</span>
             <div className="stat-value text-2xl mt-1" style={{ color: '#D97706' }}>{conversion}%</div>
             <div className="text-secondary text-xs mt-1">ответили / отправлено</div>
           </div>
@@ -103,10 +144,10 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* 2-Column Layout */}
+        {/* Две колонки */}
         <div className="grid-2 min-h-0" style={{ flex: 1 }}>
           
-          {/* Left Column: Activity Chart / List */}
+          {/* Левая колонка: активность */}
           <div className="card flex flex-col min-h-0">
             <span className="card-title mb-3 shrink-0">Активность за 7 дней</span>
             <div className="flex flex-col gap-2 overflow-y-auto pr-2" style={{ flex: 1 }}>
@@ -130,9 +171,9 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Right Column: Status Bars */}
+          {/* Правая колонка: статусы */}
           <div className="card flex flex-col min-h-0">
-            <span className="card-title mb-3 shrink-0">Воронка лидов (Общая)</span>
+            <span className="card-title mb-3 shrink-0">Общая воронка лидов</span>
             <div className="grid grid-cols-2 gap-x-6 gap-y-6 overflow-y-auto pr-2" style={{ flex: 1, alignContent: 'start' }}>
               {statuses.map(stat => (
                 <div key={stat.label}>

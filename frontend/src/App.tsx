@@ -6,9 +6,9 @@ import { Dashboard } from './pages/Dashboard';
 import { Accounts } from './pages/Accounts';
 import { Warmup } from './pages/Warmup';
 import { ParserHub } from './pages/ParserHub';
-import { ParserOlx } from './pages/ParserOlx';
-import { ParserInstagram } from './pages/ParserInstagram';
+import { ParserTelegram } from './pages/ParserTelegram';
 import { ParserGoogleMaps } from './pages/ParserGoogleMaps';
+import { ParserYandexMaps } from './pages/ParserYandexMaps';
 import { ManualBases } from './pages/ManualBases';
 import { Leads } from './pages/Leads';
 import { Pipeline } from './pages/Pipeline';
@@ -33,9 +33,9 @@ export default function App() {
               <Route path="/accounts" element={<Accounts />} />
               <Route path="/warmup" element={<Warmup />} />
               <Route path="/parser" element={<ParserHub />} />
-              <Route path="/parser/olx" element={<ParserOlx />} />
-              <Route path="/parser/instagram" element={<ParserInstagram />} />
+              <Route path="/parser/telegram" element={<ParserTelegram />} />
               <Route path="/parser/google-maps" element={<ParserGoogleMaps />} />
+              <Route path="/parser/yandex-maps" element={<ParserYandexMaps />} />
               <Route path="/manual-bases" element={<ManualBases />} />
               <Route path="/leads" element={<Leads />} />
               <Route path="/pipeline" element={<Pipeline />} />

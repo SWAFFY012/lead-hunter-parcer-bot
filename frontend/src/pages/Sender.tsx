@@ -228,7 +228,7 @@ export function Sender() {
         </div>
 
         <div className="card flex flex-col" style={{ padding: '2rem', flex: 1, minHeight: '400px' }}>
-          <span className="card-title mb-6">Live Монитор</span>
+          <span className="card-title mb-6">Монитор в реальном времени</span>
           
           <div className="flex flex-col gap-4 overflow-y-auto" style={{ maxHeight: '600px' }}>
             {logs.length === 0 && <div className="text-secondary text-center py-10">Лог рассылки пуст...</div>}

@@ -84,7 +84,7 @@ export function Settings() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Настройки</h1>
-          <div className="text-secondary mt-1">Командный центр системы Anti-Ban и интеграций</div>
+          <div className="text-secondary mt-1">Центр управления антибаном и интеграциями</div>
         </div>
       </div>
 
@@ -92,12 +92,12 @@ export function Settings() {
         
         {/* Блок 1: Безопасность и Антибан */}
         <div className="card" style={{ padding: '2rem' }}>
-          <span className="card-title mb-6">Безопасность и Антибан (WhatsApp)</span>
+          <span className="card-title mb-6">Безопасность и антибан (WhatsApp)</span>
           <div className="flex flex-col gap-6">
             
             <div className="flex justify-between items-center p-4 rounded-xl border border-blue-100" style={{ backgroundColor: 'var(--color-info-bg)' }}>
               <div>
-                <div style={{ fontWeight: 600, color: 'var(--color-info)' }}>Safe Mode (Dry Run)</div>
+                <div style={{ fontWeight: 600, color: 'var(--color-info)' }}>Безопасный режим (имитация)</div>
                 <div className="text-sm mt-1" style={{ color: '#0369A1' }}>Имитация отправки сообщений без реальной пересылки через WhatsApp. Безопасно для тестов.</div>
               </div>
               <label className="toggle">
@@ -108,7 +108,7 @@ export function Settings() {
 
             <div className="flex justify-between items-center">
               <div>
-                <div style={{ fontWeight: 500, color: '#111827' }}>Уникализация медиа (Media Hash Protection)</div>
+                <div style={{ fontWeight: 500, color: '#111827' }}>Уникализация медиа (защита хеша)</div>
                 <div className="text-sm text-secondary mt-1">Автоматическое наложение микро-шумов на изображения для обхода хеш-блэклистов.</div>
               </div>
               <label className="toggle">
@@ -170,7 +170,7 @@ export function Settings() {
 
         {/* Блок 3: Интеграции */}
         <div className="card" style={{ padding: '2rem' }}>
-          <span className="card-title mb-6">Интеграции (AI & API)</span>
+          <span className="card-title mb-6">Интеграции (ИИ и API)</span>
           <div className="flex flex-col gap-6">
             
             <div>

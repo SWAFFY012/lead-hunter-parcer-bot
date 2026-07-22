@@ -1,10 +1,12 @@
 import { chromium } from 'playwright';
 import { addExtra } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { getDb } from '../../db/database.js';
+import { getDb, hasDatabaseConfig } from '../../db/database.js';
 import { io } from '../../server.js';
 import { systemLog } from '../../utils/logger.js';
 import { getProfile, buildContextOptions, applyFingerprintScripts } from '../fingerprint/profileManager.js';
+import { collectSocialLinks, crawlWebsiteSocialLinks, mergeSocialLinks } from '../../utils/socialExtractor.js';
+import { hasActiveMapLeadFilters, matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
 
 const playwrightExtra = addExtra(chromium);
 playwrightExtra.use(StealthPlugin());
@@ -19,7 +21,8 @@ function sleep(min, max) {
 }
 
 export async function startGoogleMapsParsing(options) {
-  const { url, pages = 3, campaignId = null, profileId = null, taskId = null } = options;
+  const { url, targetCount = 30, campaignId = null, profileId = null, taskId = null } = options;
+  const filters = normalizeMapLeadFilters(options.filters);
   if (parserRunning) {
     io.emit('parser:log', { message: 'Парсер Google Maps уже запущен', type: 'warn' });
     return { success: false, error: 'Already running' };
@@ -27,12 +30,13 @@ export async function startGoogleMapsParsing(options) {
 
   parserRunning = true;
   shouldStop = false;
+  io.emit('parser:started', { platform: 'google_maps' });
   io.emit('parser:status', { isRunning: true, platform: 'google_maps' });
   systemLog('parser', 'info', `Starting Google Maps parser for URL: ${url}`);
 
   try {
-    const db = await getDb();
-    const profile = profileId ? await getProfile(profileId) : null;
+    const db = hasDatabaseConfig() ? getDb() : null;
+    const profile = db && profileId ? await getProfile(profileId) : null;
     const contextOptions = profile 
       ? buildContextOptions(profile)
       : {
@@ -76,92 +80,69 @@ export async function startGoogleMapsParsing(options) {
 
     io.emit('parser:log', { message: `Navigating to: ${url}`, type: 'info' });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    
+
+    // A clean browser profile may receive a Google consent screen first.
+    await page.getByRole('button', { name: /Принять все|Accept all|I agree|Согласен/i })
+      .first()
+      .click({ timeout: 3000 })
+      .then(() => page.waitForLoadState('domcontentloaded'))
+      .catch(() => {});
+
     // Wait for the main results list to appear
-    await page.waitForSelector('[role="feed"]', { timeout: 15000 }).catch(() => {});
+    const feedFound = await page.waitForSelector('[role="feed"]', { timeout: 20000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!feedFound) {
+      io.emit('parser:log', {
+        message: `Список результатов не найден. Страница: ${await page.title()} (${page.url()})`,
+        type: 'error',
+      });
+    }
     
     io.emit('parser:log', { message: 'Collecting places from the list...', type: 'info' });
     
-    let totalPlacesFound = new Set();
-    let placeLinks = [];
-    
-    // Scroll the feed to load results (simulate pagination)
-    for (let p = 0; p < pages; p++) {
+    const detailsPage = await context.newPage();
+    await detailsPage.route('**/*', (route) => {
+      const type = route.request().resourceType();
+      if (['image', 'media', 'font'].includes(type)) route.abort();
+      else route.continue();
+    });
+    const totalPlacesFound = new Set();
+    const maxScrolls = Math.min(120, Math.max(20, Math.ceil(targetCount * (hasActiveMapLeadFilters(filters) ? 4 : 2))));
+    let matchedCount = 0;
+    let candidatesChecked = 0;
+    let consecutiveEmptyScrolls = 0;
+
+    io.emit('parser:log', {
+      message: `Ищем ${targetCount} компаний, подходящих под выбранные фильтры.`,
+      type: 'info',
+    });
+
+    for (let scrollIndex = 0; scrollIndex < maxScrolls && matchedCount < targetCount; scrollIndex++) {
       if (shouldStop) break;
-      
-      const feedLinks = await page.evaluate(() => {
-        const links = Array.from(document.querySelectorAll('a[href*="/maps/place/"]'));
-        return links.map(a => a.href);
+      const feedLinks = await page.evaluate(() => Array.from(document.querySelectorAll('a[href*="/maps/place/"]')).map((link) => link.href));
+      const newLinks = feedLinks.filter((link) => {
+        const key = link.split('?')[0];
+        if (totalPlacesFound.has(key)) return false;
+        totalPlacesFound.add(key);
+        return true;
       });
-      
-      for (const link of feedLinks) {
-        if (!totalPlacesFound.has(link)) {
-          totalPlacesFound.add(link);
-          placeLinks.push(link);
+      consecutiveEmptyScrolls = newLinks.length ? 0 : consecutiveEmptyScrolls + 1;
+
+      for (const placeUrl of newLinks) {
+        if (shouldStop || matchedCount >= targetCount) break;
+        const placeId = placeUrl.split('?')[0];
+        if (db && taskId) {
+          const [visited] = await db`SELECT place_id FROM google_visited_places WHERE place_id = ${placeId} AND task_id = ${taskId}`;
+          if (visited) continue;
         }
-      }
-      
-      io.emit('parser:log', { message: `Scroll ${p + 1}/${pages}: Found ${totalPlacesFound.size} total places so far.`, type: 'info' });
-      
-      // Scroll the feed element down
-      const scrolled = await page.evaluate(async () => {
-        const feed = document.querySelector('[role="feed"]');
-        if (feed) {
-          feed.scrollTop = feed.scrollHeight;
-          return true;
-        }
-        return false;
-      });
-      
-      if (!scrolled) {
-        io.emit('parser:log', { message: 'Feed not found or cannot scroll further.', type: 'warn' });
-        break;
-      }
-      
-      await sleep(2000, 4000); // Wait for new items to load
-    }
-    
-    if (shouldStop) {
-      io.emit('parser:log', { message: 'Stopped collecting places.', type: 'info' });
-      return cleanup();
-    }
-    
-    // Filter out visited places
-    let placesToVisit = [];
-    let skippedCount = 0;
-    if (taskId) {
-      for (const link of placeLinks) {
-        // We use the Place ID or the full URL as place_id
-        const placeId = link.split('?')[0]; 
-        const [visited] = await db`SELECT place_id FROM google_visited_places WHERE place_id = ${placeId} AND task_id = ${taskId}`;
-        if (visited) {
-          skippedCount++;
-        } else {
-          placesToVisit.push(link);
-        }
-      }
-      if (skippedCount > 0) {
-        io.emit('parser:log', { message: `Skipped ${skippedCount} places already visited in this task.`, type: 'info' });
-      }
-    } else {
-      placesToVisit = placeLinks;
-    }
-    
-    io.emit('parser:log', { message: `Visiting ${placesToVisit.length} new places to extract contacts...`, type: 'info' });
-    
-    let leadsExtracted = 0;
-    
-    for (let i = 0; i < placesToVisit.length; i++) {
-      if (shouldStop) break;
-      const placeUrl = placesToVisit[i];
-      io.emit('parser:log', { message: `[${i + 1}/${placesToVisit.length}] Analyzing: ${placeUrl.substring(0, 80)}...`, type: 'info' });
-      
-      try {
-        await page.goto(placeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await sleep(1500, 3000);
+
+        try {
+          await detailsPage.goto(placeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await sleep(900, 1600);
         
         // Extract data
-        const extractedData = await page.evaluate(() => {
+        const extractedData = await detailsPage.evaluate(() => {
           const nameEl = document.querySelector('h1');
           const name = nameEl ? nameEl.innerText.trim() : '';
           
@@ -190,9 +171,12 @@ export async function startGoogleMapsParsing(options) {
           }
           
           let rating = '';
-          const ratingSpan = document.querySelector('span[aria-label*="stars"]');
+          const ratingSpan = document.querySelector('div.F7nice span[aria-hidden="true"]')
+            || document.querySelector('span[aria-label*="stars"], span[aria-label*="звезд"]');
           if (ratingSpan) {
-            rating = ratingSpan.innerText.trim();
+            rating = ratingSpan.innerText.trim()
+              || (ratingSpan.getAttribute('aria-label') || '').match(/[\d,.]+/)?.[0]
+              || '';
           }
           
           let address = '';
@@ -207,46 +191,62 @@ export async function startGoogleMapsParsing(options) {
             isClaimed = false;
           }
 
-          let socialLinks = [];
-          document.querySelectorAll('a[href*="instagram.com"]').forEach(a => socialLinks.push('Insta'));
-          document.querySelectorAll('a[href*="facebook.com"]').forEach(a => socialLinks.push('FB'));
+          const socialUrls = Array.from(document.querySelectorAll('a[href]'))
+            .map(a => a.href)
+            .filter(href => /(?:t\.me|telegram\.me|wa\.me|whatsapp\.com|vk\.com|instagram\.com|facebook\.com|youtube\.com|youtu\.be|ok\.ru|viber\.com|tiktok\.com|twitter\.com|x\.com)/i.test(href));
           
-          return { name, title, phone, website, rating, address, isClaimed, socialLinks };
+          return { name, title, phone, website, rating, address, isClaimed, socialUrls };
         });
         
-        const { name, title, phone, website, rating, address, isClaimed, socialLinks } = extractedData;
+        const { name, title, phone, website, rating, address, isClaimed, socialUrls } = extractedData;
+        const socialLinks = mergeSocialLinks(
+          collectSocialLinks(socialUrls),
+          await crawlWebsiteSocialLinks(website)
+        );
         
-        // Clean phone
         const rawPhone = phone || '';
-        let cleanPhone = rawPhone.replace(/\D/g, '');
-        if (cleanPhone.length >= 10) {
-          // Valid phone found!
+        const cleanPhone = rawPhone.replace(/\D/g, '');
+        const lead = {
+          name,
+          title,
+          phone: rawPhone,
+          website,
+          rating,
+          address,
+          sourceUrl: placeUrl,
+          isClaimed,
+          socialLinks,
+          platform: 'google_maps',
+        };
+        candidatesChecked++;
+        const isMatch = matchesMapLeadFilters(lead, filters);
+        if (isMatch) {
+          matchedCount++;
+          io.emit('parser:lead', { lead });
+          io.emit('parser:log', { message: `[${matchedCount}/${targetCount}] Подходит: ${name}`, type: 'success' });
+        }
+
+        if (isMatch && db && cleanPhone.length >= 10) {
           let enrichedAdText = rating ? `Рейтинг: ${rating}. ` : '';
           if (address) enrichedAdText += `Адрес: ${address}. `;
-          if (!isClaimed) enrichedAdText += `Статус: ТОЧКА НЕ ПОДТВЕРЖДЕНА ВЛАДЕЛЬЦЕМ (UNCLAIMED). `;
-          if (socialLinks.length > 0) enrichedAdText += `Соцсети: ${socialLinks.join(', ')}. `;
-          
+          if (!isClaimed) enrichedAdText += 'Статус: карточка не подтверждена владельцем. ';
+          if (socialLinks.length > 0) enrichedAdText += `Соцсети: ${socialLinks.map((item) => item.platform).join(', ')}. `;
           const ad_text = enrichedAdText.trim();
-          
-          // Insert into database
+
           try {
             await db`
               INSERT INTO leads (phone, name, title, ad_text, source_url, website, platform, campaign_id, status)
               VALUES (${cleanPhone}, ${name}, ${title}, ${ad_text}, ${placeUrl}, ${website}, 'google_maps', ${campaignId}, 'new')
               ON CONFLICT (phone) DO NOTHING
             `;
-            leadsExtracted++;
-            io.emit('parser:log', { message: `Saved lead: ${name} (${cleanPhone})`, type: 'success' });
+            io.emit('parser:log', { message: `Сохранено в CRM: ${name} (${cleanPhone})`, type: 'success' });
           } catch (dbErr) {
-            io.emit('parser:log', { message: `DB Error saving ${name}: ${dbErr.message}`, type: 'error' });
+            io.emit('parser:log', { message: `Ошибка сохранения ${name}: ${dbErr.message}`, type: 'error' });
           }
-        } else {
-          io.emit('parser:log', { message: `No valid phone for: ${name}`, type: 'warn' });
         }
         
         // Mark as visited
-        if (taskId) {
-          const placeId = placeUrl.split('?')[0];
+        if (db && taskId) {
           await db`
             INSERT INTO google_visited_places (place_id, task_id)
             VALUES (${placeId}, ${taskId})
@@ -254,12 +254,38 @@ export async function startGoogleMapsParsing(options) {
           `;
         }
         
-      } catch (err) {
-        io.emit('parser:log', { message: `Error parsing place: ${err.message}`, type: 'error' });
+        } catch (err) {
+          io.emit('parser:log', { message: `Не удалось прочитать карточку: ${err.message}`, type: 'error' });
+        }
+
+        io.emit('parser:progress', {
+          platform: 'google_maps',
+          currentPage: scrollIndex + 1,
+          totalPages: maxScrolls,
+          matchedCount,
+          candidatesChecked,
+          targetCount,
+        });
       }
+
+      if (matchedCount >= targetCount || consecutiveEmptyScrolls >= 3) break;
+      const scrolled = await page.evaluate(() => {
+        const feed = document.querySelector('[role="feed"]');
+        if (!feed) return false;
+        feed.scrollTop = feed.scrollHeight;
+        return true;
+      });
+      if (!scrolled) break;
+      await sleep(1300, 2300);
     }
-    
-    io.emit('parser:log', { message: `Finished! Extracted ${leadsExtracted} new Google Maps leads.`, type: 'success' });
+
+    const finishType = matchedCount >= targetCount ? 'success' : 'warn';
+    io.emit('parser:log', {
+      message: matchedCount >= targetCount
+        ? `Готово: найдено ${matchedCount} подходящих компаний.`
+        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount} подходящих компаний, проверено ${candidatesChecked}.`,
+      type: finishType,
+    });
 
   } catch (err) {
     systemLog('parser', 'error', 'Google Maps parser crashed', err);
@@ -287,5 +313,6 @@ async function cleanup() {
   }
   parserRunning = false;
   io.emit('parser:status', { isRunning: false, platform: 'google_maps' });
+  io.emit('parser:done', { platform: 'google_maps' });
   io.emit('parser:log', { message: 'Парсер завершен!', type: 'info' });
 }

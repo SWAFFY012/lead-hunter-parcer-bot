@@ -403,7 +403,7 @@ export function ManualBases() {
     <div className="flex flex-col h-full">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Ручные базы (Anti-Ban)</h1>
+          <h1 className="page-title">Ручные базы (антибан)</h1>
           <div className="text-secondary mt-1">Управление базами собранными через расширение</div>
         </div>
       </div>

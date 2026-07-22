@@ -446,8 +446,8 @@ export function ParserInstagram() {
               <table style={{ margin: 0 }}>
                 <thead>
                   <tr>
-                    <th>Имя / Username</th>
-                    <th>Описание профиля (Bio)</th>
+                    <th>Имя / Имя пользователя</th>
+                    <th>Описание профиля</th>
                     <th>Найдено</th>
                   </tr>
                 </thead>
@@ -476,7 +476,7 @@ export function ParserInstagram() {
               <div className="flex flex-col gap-2 p-4 rounded-xl relative mt-6" style={{ backgroundColor: '#111827', color: '#9CA3AF', fontFamily: 'var(--font-family-mono)', height: '400px', overflowY: 'auto' }}>
                 <div className="flex justify-between items-center mb-2">
                   <div className="flex items-center gap-4">
-                    <div className="text-xs" style={{ color: '#4B5563' }}>SYSTEM LOG</div>
+                    <div className="text-xs" style={{ color: '#4B5563' }}>СИСТЕМНЫЙ ЖУРНАЛ</div>
                     <label className="flex items-center gap-2 cursor-pointer" style={{ fontSize: '13px', color: '#9CA3AF' }}>
                       <input type="checkbox" checked={takeScreenshots} onChange={e => setTakeScreenshots(e.target.checked)} disabled={loading} style={{ width: '14px', height: '14px', cursor: 'pointer' }} />
                       Делать скриншоты ошибок (debug)

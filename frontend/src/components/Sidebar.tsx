@@ -2,15 +2,15 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 
 const navItems = [
-  { to: '/', icon: '📊', label: 'Dashboard', end: true },
+  { to: '/', icon: '📊', label: 'Главная', end: true },
   { to: '/accounts', icon: '📱', label: 'Аккаунты' },
   { to: '/warmup', icon: '🔥', label: 'Прогрев' },
-  { to: '/parser', icon: '🕷️', label: 'Авто-Парсинг' },
+  { to: '/parser', icon: '🕷️', label: 'Автопарсинг' },
   { to: '/manual-bases', icon: '🎯', label: 'Ручные базы' },
   { to: '/profiles', icon: '🧬', label: 'Профили' },
   { to: '/leads', icon: '👥', label: 'Лиды / CRM' },
   { to: '/pipeline', icon: '🗂️', label: 'Воронка' },
-  { to: '/ai', icon: '🤖', label: 'Промпты и Шаблоны' },
+  { to: '/ai', icon: '🤖', label: 'Промпты и шаблоны' },
   { to: '/sender', icon: '📤', label: 'Рассылка' },
   { to: '/settings', icon: '⚙️', label: 'Настройки' },
   { to: '/logs', icon: '📝', label: 'Журнал ошибок' },

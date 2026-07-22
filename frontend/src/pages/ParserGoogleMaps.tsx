@@ -1,379 +1,269 @@
-import React, { useState, useEffect } from 'react';
+import React, { FormEvent, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { socket } from '../services/socket';
 
-interface ParsedLead {
-  id?: number;
-  phone: string;
-  name?: string;
-  title?: string;
-  time?: string;
-  platform?: string;
+interface SocialLink {
+  platform: string;
+  url: string;
 }
 
-interface Profile {
-  id: string;
+interface MapLead {
   name: string;
-  webgl_renderer: string;
-  session_path: string | null;
+  title: string;
+  phone: string;
+  website: string;
+  rating: string;
+  address: string;
+  description?: string;
+  socialLinks?: SocialLink[];
+  sourceUrl: string;
+  isClaimed: boolean;
+  platform: 'google_maps' | 'yandex_maps';
+}
+
+type PresenceFilter = 'all' | 'with' | 'without';
+type MapsProvider = 'google' | 'yandex';
+
+interface ParserProgress {
+  current: number;
+  total: number;
+  matched: number;
+  checked: number;
+  target: number;
+}
+
+const providerConfig = {
+  google: {
+    name: 'Google Карты',
+    platform: 'google_maps' as const,
+    endpoint: 'google-maps',
+    storage: 'gm',
+  },
+  yandex: {
+    name: 'Яндекс Карты',
+    platform: 'yandex_maps' as const,
+    endpoint: 'yandex-maps',
+    storage: 'ym',
+  },
+};
+
+function csvCell(value: string | boolean) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function downloadCsv(leads: MapLead[], provider: MapsProvider) {
+  const rows = [
+    ['Название', 'Категория', 'Телефон', 'Сайт', 'Соцсети', 'Рейтинг', 'Адрес', 'Описание', 'Карточка'],
+    ...leads.map((lead) => [
+      lead.name,
+      lead.title,
+      lead.phone,
+      lead.website,
+      (lead.socialLinks || []).map((social) => `${social.platform}: ${social.url}`).join(', '),
+      lead.rating,
+      lead.address,
+      lead.description || '',
+      lead.sourceUrl,
+    ]),
+  ];
+  const content = '\uFEFF' + rows.map((row) => row.map(csvCell).join(';')).join('\n');
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${provider}-maps-leads.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export function MapsParser({ provider }: { provider: MapsProvider }) {
+  const navigate = useNavigate();
+  const config = providerConfig[provider];
+  const api = `http://${window.location.hostname}:3001/api/${config.endpoint}`;
+  const [query, setQuery] = useState(() => localStorage.getItem(`${config.storage}_query`) || '');
+  const [targetCount, setTargetCount] = useState(() => Number(localStorage.getItem(`${config.storage}_target`)) || 30);
+  const [websiteFilter, setWebsiteFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_website`) as PresenceFilter) || 'all');
+  const [phoneFilter, setPhoneFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_phone`) as PresenceFilter) || 'all');
+  const [socialFilter, setSocialFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_socials`) as PresenceFilter) || 'all');
+  const [leads, setLeads] = useState<MapLead[]>([]);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<ParserProgress>({ current: 0, total: 0, matched: 0, checked: 0, target: 30 });
+  const [error, setError] = useState('');
+  const [showLogs, setShowLogs] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem(`${config.storage}_query`, query);
+    localStorage.setItem(`${config.storage}_target`, String(targetCount));
+    localStorage.setItem(`${config.storage}_website`, websiteFilter);
+    localStorage.setItem(`${config.storage}_phone`, phoneFilter);
+    localStorage.setItem(`${config.storage}_socials`, socialFilter);
+  }, [config.storage, phoneFilter, query, socialFilter, targetCount, websiteFilter]);
+
+  useEffect(() => {
+    const onStarted = (data: { platform: string; targetCount?: number }) => {
+      if (data.platform !== config.platform) return;
+      const target = data.targetCount || targetCount;
+      setLoading(true);
+      setLeads([]);
+      setLogs([`Парсер запущен. Ищем ${target} подходящих компаний в ${config.name}…`]);
+      setProgress({ current: 0, total: 0, matched: 0, checked: 0, target });
+    };
+    const onProgress = (data: {
+      platform?: string;
+      currentPage: number;
+      totalPages: number;
+      matchedCount?: number;
+      candidatesChecked?: number;
+      targetCount?: number;
+    }) => {
+      if (data.platform !== config.platform) return;
+      setProgress({
+        current: data.currentPage,
+        total: data.totalPages,
+        matched: data.matchedCount || 0,
+        checked: data.candidatesChecked || 0,
+        target: data.targetCount || targetCount,
+      });
+    };
+    const onLead = (data: { lead: MapLead }) => {
+      if (data.lead.platform !== config.platform) return;
+      setLeads((current) => current.some((lead) => lead.sourceUrl === data.lead.sourceUrl) ? current : [data.lead, ...current]);
+    };
+    const onLog = (data: { message: string }) => {
+      setLogs((current) => [`[${new Date().toLocaleTimeString('ru-RU')}] ${data.message}`, ...current].slice(0, 300));
+    };
+    const onDone = (data?: { platform?: string }) => {
+      if (data?.platform !== config.platform) return;
+      setLoading(false);
+    };
+
+    socket.on('parser:started', onStarted);
+    socket.on('parser:progress', onProgress);
+    socket.on('parser:lead', onLead);
+    socket.on('parser:log', onLog);
+    socket.on('parser:done', onDone);
+    fetch(`${api}/status`)
+      .then((response) => response.json())
+      .then((data: { isRunning?: boolean }) => setLoading(Boolean(data.isRunning)))
+      .catch(() => undefined);
+
+    return () => {
+      socket.off('parser:started', onStarted);
+      socket.off('parser:progress', onProgress);
+      socket.off('parser:lead', onLead);
+      socket.off('parser:log', onLog);
+      socket.off('parser:done', onDone);
+    };
+  }, [api, config.name, config.platform, targetCount]);
+
+  const startParsing = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+    if (query.trim().length < 3) {
+      setError('Введите запрос: например, Москва натяжные потолки.');
+      return;
+    }
+    try {
+      const response = await fetch(`${api}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          targetCount,
+          filters: { website: websiteFilter, phone: phoneFilter, socials: socialFilter },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось запустить парсер.');
+    } catch (requestError) {
+      setLoading(false);
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось запустить парсер.');
+    }
+  };
+
+  const stopParsing = async () => {
+    await fetch(`${api}/stop`, { method: 'POST' }).catch(() => undefined);
+    setLoading(false);
+  };
+
+  const progressPercent = progress.target ? Math.min(100, Math.round((progress.matched / progress.target) * 100)) : 0;
+
+  return (
+    <div className={`maps-page ${provider}`}>
+      <header className="telegram-header maps-header">
+        <button className="telegram-back" onClick={() => navigate('/parser')} aria-label="Назад">←</button>
+        <div>
+          <span className="telegram-kicker">ПАРСЕР / {config.name.toUpperCase()}</span>
+          <h1>Поиск компаний по заданным условиям</h1>
+          <p>Парсер пропускает неподходящие карточки и продолжает поиск, пока не соберёт указанное количество.</p>
+        </div>
+        <span className={`telegram-status ${loading ? 'online' : ''}`}><i />{loading ? 'Сбор идёт' : 'Готов к запуску'}</span>
+      </header>
+
+      <main className="telegram-body maps-body">
+        {error ? <div className="telegram-alert">{error}</div> : null}
+        <section className="maps-flow" aria-label="Как работает парсер">
+          <div><b>01</b><span>Запрос</span><small>Москва натяжные потолки</small></div><i>→</i>
+          <div><b>02</b><span>Условия</span><small>Например: без сайта, с телефоном</small></div><i>→</i>
+          <div><b>03</b><span>Цель</span><small>30 подходящих компаний</small></div>
+        </section>
+
+        <section className="maps-workspace">
+          <form className="telegram-panel maps-search-panel" onSubmit={startParsing}>
+            <span className="panel-label">НАСТРОЙКИ СБОРА</span>
+            <h2>Кого нужно найти?</h2>
+            <label>Город + ниша или услуга</label>
+            <input className="form-input maps-query" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Москва натяжные потолки" disabled={loading} />
+
+            <div className="maps-target-row">
+              <div>
+                <label>Сколько подходящих компаний</label>
+                <select className="form-input" value={targetCount} onChange={(event) => setTargetCount(Number(event.target.value))} disabled={loading}>
+                  <option value={10}>10 компаний</option>
+                  <option value={30}>30 компаний</option>
+                  <option value={50}>50 компаний</option>
+                  <option value={100}>100 компаний</option>
+                </select>
+              </div>
+              <div className="maps-server-filter-note"><b>Фильтры работают во время поиска</b><span>Неподходящие компании не попадают в результат.</span></div>
+            </div>
+
+            <div className="maps-filter-bar maps-filter-settings">
+              <label>Сайт<select value={websiteFilter} onChange={(event) => setWebsiteFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть сайт</option><option value="without">Нет сайта</option></select></label>
+              <label>Телефон<select value={phoneFilter} onChange={(event) => setPhoneFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть телефон</option><option value="without">Нет телефона</option></select></label>
+              <label>Соцсети<select value={socialFilter} onChange={(event) => setSocialFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть соцсети</option><option value="without">Нет соцсетей</option></select></label>
+            </div>
+
+            {loading ? <button type="button" className="btn btn-secondary maps-start" onClick={stopParsing}>Остановить сбор</button> : <button className="btn btn-primary maps-start">Найти {targetCount} подходящих компаний</button>}
+            {loading ? <div className="maps-progress"><span style={{ width: `${progressPercent}%` }} /><small>Подходит {progress.matched} из {progress.target} · проверено карточек: {progress.checked}</small></div> : null}
+          </form>
+          <aside className="telegram-note maps-note"><b>Важно</b><p>Если выбрано «Нет сайта + Есть телефон + Есть соцсети», парсер будет проверять выдачу дальше, а не остановится на первых 30 карточках.</p><small>Если таких компаний в выдаче меньше цели, журнал покажет, сколько найдено и сколько карточек проверено.</small></aside>
+        </section>
+
+        <section className="telegram-results maps-results">
+          <div className="results-heading">
+            <div><span className="panel-label">РЕЗУЛЬТАТ ПО УСЛОВИЯМ</span><h2>Подходящие компании</h2></div>
+            <div className="result-metrics"><span><b>{leads.length}</b> найдено</span><span><b>{progress.checked}</b> проверено</span><span><b>{progress.target || targetCount}</b> цель</span></div>
+          </div>
+          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button></div>
+          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th></tr></thead><tbody>
+            {leads.map((lead) => <tr key={lead.sourceUrl}>
+              <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.title}</small></td>
+              <td>{lead.phone || '—'}</td>
+              <td>{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Открыть сайт</a> : <span className="maps-missing">Нет сайта</span>}</td>
+              <td><div className="maps-socials">{lead.socialLinks?.length ? lead.socialLinks.map((social) => <a key={social.url} href={social.url} target="_blank" rel="noreferrer">{social.platform}</a>) : <span className="maps-missing">Не найдены</span>}</div></td>
+              <td>{lead.address || '—'}</td><td>{lead.rating || '—'}</td>
+            </tr>)}
+            {!leads.length ? <tr><td colSpan={6} className="telegram-empty">{loading ? `Проверяем выдачу: найдено ${progress.matched} из ${progress.target}…` : 'Настройте условия и запустите поиск'}</td></tr> : null}
+          </tbody></table></div>
+          <button className="maps-log-toggle" onClick={() => setShowLogs((visible) => !visible)}>{showLogs ? 'Скрыть журнал' : `Показать журнал (${logs.length})`}</button>
+          {showLogs ? <div className="maps-logs">{logs.length ? logs.map((log, index) => <div key={`${index}-${log}`}>{log}</div>) : <div>Ждём запуска парсера…</div>}</div> : null}
+        </section>
+      </main>
+    </div>
+  );
 }
 
 export function ParserGoogleMaps() {
-  const [url, setUrl] = useState(() => localStorage.getItem('gm_url') || '');
-  const [pages, setPages] = useState(() => Number(localStorage.getItem('gm_pages')) || 3);
-  const platform = 'google_maps';
-  const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0, currentAccount: 0, totalAccounts: 0, status: 'idle' });
-  const [leads, setLeads] = useState<ParsedLead[]>([]);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [campaigns, setCampaigns] = useState<{id: number, name: string}[]>([]);
-  const [selectedCampaignId, setSelectedCampaignId] = useState<number | ''>(() => {
-    const saved = localStorage.getItem('gm_campaignId');
-    return saved ? Number(saved) : '';
-  });
-  
-  const [tasks, setTasks] = useState<any[]>([]);
-
-  useEffect(() => {
-    localStorage.setItem('gm_url', url);
-    localStorage.setItem('gm_pages', String(pages));
-    if (selectedCampaignId) {
-      localStorage.setItem('gm_campaignId', String(selectedCampaignId));
-    } else {
-      localStorage.removeItem('gm_campaignId');
-    }
-  }, [url, pages, selectedCampaignId]);
-
-  const fetchTasks = () => {
-    fetch(`http://${window.location.hostname}:3001/api/parser/tasks`)
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setTasks(data.filter((t: any) => t.platform === 'google_maps')); })
-      .catch(console.error);
-  };
-
-  useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  useEffect(() => {
-    fetch(`http://${window.location.hostname}:3001/api/campaigns`)
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setCampaigns(data); })
-      .catch(console.error);
-  }, []);
-
-
-
-  useEffect(() => {
-    const handleStarted = (data: { platform: string }) => {
-      if (data.platform !== platform) return;
-      setLoading(true);
-      setLeads([]);
-      setLogs(['Парсер запущен...']);
-      setProgress({ current: 0, total: 0, currentAccount: 0, totalAccounts: 0, status: 'running' });
-    };
-
-    const handleProgress = (data: { currentPage: number, totalPages: number, currentAccount?: number, totalAccounts?: number }) => {
-      setProgress({ 
-        current: data.currentPage, 
-        total: data.totalPages, 
-        currentAccount: data.currentAccount || 0,
-        totalAccounts: data.totalAccounts || 0,
-        status: 'running' 
-      });
-    };
-
-    const handleLead = (data: { lead: ParsedLead }) => {
-      if (data.lead.platform !== platform) return;
-      setLeads(prev => [{ ...data.lead, time: new Date().toLocaleTimeString() }, ...prev]);
-    };
-
-    const handleLog = (data: { message: string, type: string }) => {
-      setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${data.message}`, ...prev].slice(0, 500));
-    };
-
-    const handleDone = () => {
-      setLoading(false);
-      setProgress(prev => ({ ...prev, status: 'idle' }));
-      setLogs(prev => [`[${new Date().toLocaleTimeString()}] Парсинг завершен!`, ...prev]);
-    };
-
-    socket.on('parser:started', handleStarted);
-    socket.on('parser:progress', handleProgress);
-    socket.on('parser:lead', handleLead);
-    socket.on('parser:log', handleLog);
-    socket.on('parser:done', handleDone);
-
-    fetch(`http://${window.location.hostname}:3001/api/parser/status`)
-      .then(r => r.json())
-      .then(res => {
-        if (res.isRunning && res.platform === platform) {
-          setLoading(true);
-        }
-      })
-      .catch(console.error);
-
-    return () => {
-      socket.off('parser:started', handleStarted);
-      socket.off('parser:progress', handleProgress);
-      socket.off('parser:lead', handleLead);
-      socket.off('parser:log', handleLog);
-      socket.off('parser:done', handleDone);
-    };
-  }, []);
-
-  const handleStart = async () => {
-    try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url,
-          pages: Number(pages),
-          campaign_id: selectedCampaignId || undefined,
-          platform
-        })
-      });
-      setTimeout(fetchTasks, 2000);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleContinueTask = async (task: any) => {
-    const newPages = task.pages + 3;
-    setUrl(task.url);
-    setPages(newPages);
-    if (task.campaign_id) setSelectedCampaignId(task.campaign_id);
-    
-    try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: task.url,
-          pages: newPages,
-          campaign_id: task.campaign_id || undefined,
-          platform,
-          taskId: task.id
-        })
-      });
-      setTimeout(fetchTasks, 2000);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleDeleteTask = async (taskId: number) => {
-    if (!window.confirm('Удалить задачу из истории?')) return;
-    try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/tasks/${taskId}`, { method: 'DELETE' });
-      fetchTasks();
-    } catch (err) { console.error(err); }
-  };
-
-  const handleStop = async () => {
-    try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/stop`, { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform })
-      });
-      setLoading(false);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-
-  let progressPercent = 0;
-  if (progress.total > 0) {
-    progressPercent = Math.round((progress.current / progress.total) * 100);
-  }
-
-  const renderLogText = (text: string) => {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return text.split(urlRegex).map((part, i) => {
-      if (part.match(urlRegex)) {
-        return <a key={i} href={part} target="_blank" rel="noreferrer" style={{ color: '#60A5FA', textDecoration: 'underline' }}>{part}</a>;
-      }
-      return part;
-    });
-  };
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="page-header flex justify-between items-center">
-        <div>
-          <h1 className="page-title">Парсинг Google Maps</h1>
-          <div className="text-secondary mt-1">Автоматический сбор контактов компаний по ссылке на поиск Google Карт</div>
-        </div>
-      </div>
-
-      <div className="page-body flex flex-col gap-6">
-        
-        {/* Settings */}
-          <div className="card h-fit" style={{ padding: '24px' }}>
-            <div className="flex justify-between items-center mb-6">
-              <span className="card-title" style={{ margin: 0 }}>Настройки парсера</span>
-            </div>
-            
-            <div className="flex flex-col gap-4">
-
-              <div>
-                <label className="form-label">База данных (Кампания) для сохранения</label>
-                <select className="form-input" value={selectedCampaignId} onChange={e => setSelectedCampaignId(Number(e.target.value) || '')} disabled={loading}>
-                  <option value="">Без базы (просто в общий список)</option>
-                  {campaigns.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="form-label">Ссылка на результаты поиска Google Maps</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="https://www.google.com/maps/search/Рестораны+Киев/"
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
-
-
-
-              <div>
-                <label className="form-label">Количество прокруток ленты (скроллов)</label>
-                <input 
-                  type="number" 
-                  className="form-input" 
-                  value={pages}
-                  onChange={e => setPages(Number(e.target.value))}
-                  disabled={loading}
-                />
-              </div>
-
-              <div className="mt-2">
-                {!loading ? (
-                  <button className="btn btn-primary w-full justify-center" onClick={handleStart} style={{ height: '44px', background: '#e1306c', border: 'none' }}>📸 Начать сбор Google Maps</button>
-                ) : (
-                  <button className="btn btn-secondary w-full justify-center" onClick={handleStop} style={{ height: '44px', color: 'var(--color-error)' }}>⏹ Остановить парсер</button>
-                )}
-              </div>
-            </div>
-          </div>
-
-        {/* Progress and Results */}
-        <div className="card">
-          <div className="flex justify-between items-end mb-4">
-            <span className="card-title" style={{ margin: 0 }}>Результаты парсинга</span>
-            {progress.total > 0 && (
-              <div className="text-sm font-semibold" style={{ color: 'var(--color-primary)' }}>
-                {progress.totalAccounts > 0 
-                  ? `Аккаунт ${progress.currentAccount} из ${progress.totalAccounts}`
-                  : `Страница ${progress.current} из ${progress.total}`
-                }
-              </div>
-            )}
-          </div>
-
-          <div style={{ height: '8px', width: '100%', backgroundColor: '#EEF2FF', borderRadius: '4px', overflow: 'hidden', marginBottom: '24px' }}>
-            <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: 'var(--color-primary)', borderRadius: '4px', transition: 'width 0.3s' }} />
-          </div>
-          
-          {tasks.length > 0 && (
-            <div className="card p-6 mb-6">
-              <h2 className="card-title text-sm mb-4">Сохраненные задачи парсинга</h2>
-              <div className="flex flex-col gap-3">
-                {tasks.map(task => (
-                  <div key={task.id} className="flex justify-between items-center p-3 rounded-lg border border-gray-100 bg-gray-50">
-                    <div className="flex-1 min-w-0 pr-4">
-                      <div className="font-medium text-sm break-all" style={{ color: '#111827' }}>
-                        <a href={task.url} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">🔗 Открыть ссылку</a>
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        Кампания: {task.campaign_name || 'Без кампании'} • Лидов: {task.total_leads} • Просмотрено: {task.visited_count} постов
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button 
-                        className="btn btn-primary text-xs shrink-0" 
-                        style={{ padding: '6px 12px' }}
-                        onClick={() => handleContinueTask(task)}
-                        disabled={loading}
-                      >
-                        ▶️ Продолжить
-                      </button>
-                      <button 
-                        className="btn btn-secondary text-xs" 
-                        style={{ padding: '6px 10px', color: '#EF4444' }}
-                        onClick={() => handleDeleteTask(task.id)}
-                        disabled={loading}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="card p-6">
-            <div className="table-container" style={{ flex: 2 }}>
-              <table style={{ margin: 0 }}>
-                <thead>
-                  <tr>
-                    <th>Имя / Username</th>
-                    <th>Описание профиля (Bio)</th>
-                    <th>Найдено</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leads.map((lead, i) => (
-                    <tr key={i}>
-                      <td>
-                        <div style={{ fontWeight: 500, color: '#111827' }}>{lead.name || 'Без имени'}</div>
-                        <div className="text-xs text-secondary">{lead.phone}</div>
-                      </td>
-                      <td><div style={{ color: '#374151', maxWidth: '350px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lead.title}</div></td>
-                      <td><span className="text-xs text-secondary">{lead.time}</span></td>
-                    </tr>
-                  ))}
-                  {leads.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="text-center text-secondary py-8">
-                        {loading ? 'Ищем лиды...' : 'Нет собранных лидов'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-              <div className="flex flex-col gap-2 p-4 rounded-xl relative mt-6" style={{ backgroundColor: '#111827', color: '#9CA3AF', fontFamily: 'var(--font-family-mono)', height: '400px', overflowY: 'auto' }}>
-                <div className="flex justify-between items-center mb-2">
-                  <div className="flex items-center gap-4">
-                    <div className="text-xs" style={{ color: '#4B5563' }}>SYSTEM LOG</div>
-                  </div>
-                  <button 
-                    className="btn btn-secondary text-xs" 
-                    style={{ padding: '4px 8px', minHeight: 'auto', backgroundColor: '#374151', color: '#FFF', border: 'none' }}
-                    onClick={() => navigator.clipboard.writeText(logs.join('\n'))}
-                  >
-                    Скопировать логи
-                  </button>
-                </div>
-                {logs.map((log, i) => (
-                  <div key={i} className="text-sm">{renderLogText(log)}</div>
-                ))}
-                {logs.length === 0 && <div className="text-sm text-secondary">Ждем запуска парсера...</div>}
-              </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
+  return <MapsParser provider="google" />;
 }

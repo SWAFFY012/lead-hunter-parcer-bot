@@ -57,6 +57,7 @@ logs/
 # Папка с профилями браузера (содержит тяжелые временные файлы Chromium)
 data/browser-profiles/
 data/olx-sessions/
+data/telegram/
 # Кэши загрузок/парсинга и скриншоты
 data/downloads/
 data/tmp/

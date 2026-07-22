@@ -1,7 +1,7 @@
 {
   "name": "leadhunter",
   "version": "1.0.0",
-  "description": "LeadHunter — automated lead generation & WhatsApp outreach tool",
+  "description": "LeadHunter — сбор лидов, CRM и управление рассылками",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",

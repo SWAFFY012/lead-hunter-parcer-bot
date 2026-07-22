@@ -159,7 +159,7 @@ export function Warmup() {
           {/* Live Logs */}
           <div className="card flex flex-col h-full" style={{ overflow: 'hidden' }}>
             <div className="flex justify-between items-center mb-4">
-              <span className="card-title" style={{ margin: 0 }}>Live Лог</span>
+              <span className="card-title" style={{ margin: 0 }}>Журнал в реальном времени</span>
               {isRunning ? (
                 <span className="badge badge-online">работает</span>
               ) : (
