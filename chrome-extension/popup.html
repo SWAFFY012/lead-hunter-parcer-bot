@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>LeadHunter Manual</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            width: 300px;
+            padding: 16px;
+            margin: 0;
+            background: #F9FAFB;
+            color: #111827;
+        }
+        h3 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            font-size: 16px;
+            color: #1F2937;
+        }
+        .form-group {
+            margin-bottom: 12px;
+        }
+        label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #4B5563;
+        }
+        select, input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .divider {
+            text-align: center;
+            font-size: 12px;
+            color: #9CA3AF;
+            margin: 12px 0;
+            position: relative;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background: #E5E7EB;
+        }
+        .divider::before { left: 0; }
+        .divider::after { right: 0; }
+        
+        button {
+            width: 100%;
+            background: #2563EB;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        button:hover { background: #1D4ED8; }
+        button:disabled { background: #9CA3AF; cursor: not-allowed; }
+        
+        #status {
+            font-size: 12px;
+            text-align: center;
+            margin-top: 12px;
+            min-height: 16px;
+            color: #10B981;
+            font-weight: 500;
+        }
+        .error { color: #EF4444 !important; }
+    </style>
+</head>
+<body>
+    <h3>🎯 LeadHunter</h3>
+    
+    <div class="form-group">
+        <label>Выберите существующую базу:</label>
+        <select id="bases-select">
+            <option value="">-- Выберите базу --</option>
+        </select>
+    </div>
+
+    <div class="divider">ИЛИ</div>
+
+    <div class="form-group">
+        <label>Создайте новую базу:</label>
+        <input type="text" id="new-base-input" placeholder="Название новой базы">
+    </div>
+
+    <button id="save-btn">Сделать активной</button>
+    <div id="status"></div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

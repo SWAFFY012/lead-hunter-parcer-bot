@@ -1,0 +1,76 @@
+# ========================
+# OS & File System
+# ========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ========================
+# IDEs / Editors
+# ========================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ========================
+# Node.js
+# ========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ========================
+# Python
+# ========================
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+pip-log.txt
+
+# ========================
+# Environments & Secrets
+# ========================
+.env
+.env.*
+!.env.example
+
+# ========================
+# Logs, Databases & Data
+# ========================
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+# Папка с профилями браузера (содержит тяжелые временные файлы Chromium)
+data/browser-profiles/
+data/olx-sessions/
+# Кэши загрузок/парсинга и скриншоты
+data/downloads/
+data/tmp/
+data/debug_screenshots/
+# Сессии WhatsApp (Baileys)
+backend/sessions/
+backend/backend/sessions/
+
+# ========================
+# Build / Temp artifacts
+# ========================
+dist/
+build/
+coverage/
+.tmp/
+tmp/
+_ig_repos/

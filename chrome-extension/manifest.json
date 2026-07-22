@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "LeadHunter Manual Parser",
+  "version": "1.0",
+  "description": "Extracts phone numbers and ad details from OLX and sends them to the local LeadHunter CRM.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "*://*.olx.ua/*",
+    "http://localhost:3001/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.olx.ua/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_title": "LeadHunter Extension Active",
+    "default_popup": "popup.html"
+  }
+}

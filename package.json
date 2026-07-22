@@ -1,0 +1,21 @@
+{
+  "name": "leadhunter",
+  "version": "1.0.0",
+  "description": "LeadHunter — automated lead generation & WhatsApp outreach tool",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "launcher": "electron main.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^43.1.1"
+  },
+  "dependencies": {
+    "pm2": "^7.0.3",
+    "serve": "^14.2.6"
+  }
+}

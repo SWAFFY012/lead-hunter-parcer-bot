@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>LeadHunter Launcher</title>
+  <style>
+    :root {
+      --bg-main: #0F172A; /* slate-900 */
+      --bg-panel: #1E293B; /* slate-800 */
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --primary: #3B82F6;
+      --primary-hover: #2563EB;
+      --error: #EF4444;
+      --error-hover: #DC2828;
+      --warning: #F59E0B;
+      --warning-hover: #D97706;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      box-sizing: border-box;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    p.subtitle {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s, opacity 0.2s;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-start {
+      background-color: var(--primary);
+    }
+    .btn-start:hover:not(:disabled) {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-stop {
+      background-color: var(--warning);
+    }
+    .btn-stop:hover:not(:disabled) {
+      background-color: var(--warning-hover);
+    }
+
+    .btn-force {
+      background-color: var(--error);
+    }
+    .btn-force:hover:not(:disabled) {
+      background-color: var(--error-hover);
+    }
+
+    .terminal-container {
+      flex: 1;
+      background-color: #020617; /* slate-950 */
+      border-radius: 12px;
+      border: 1px solid #334155;
+      padding: 16px;
+      overflow-y: auto;
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+    }
+
+    .log-line {
+      margin: 0;
+      word-wrap: break-word;
+      color: #A7F3D0; /* emerald-200 for normal text */
+    }
+
+    .log-error {
+      color: #FCA5A5; /* red-300 */
+    }
+
+    .log-info {
+      color: #93C5FD; /* blue-300 */
+    }
+
+    #error-alert {
+      display: none;
+      background-color: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--error);
+      color: #FCA5A5;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      text-align: center;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>LeadHunter CRM</h1>
+    <p class="subtitle">Умный системный контроллер</p>
+  </div>
+
+  <div id="error-alert"></div>
+
+  <div class="controls">
+    <button class="btn-start" id="btn-start">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      Старт / Открыть
+    </button>
+    <button class="btn-start" id="btn-restart" style="background-color: #059669;">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+      Перезагрузка
+    </button>
+    <button class="btn-stop" id="btn-stop">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M9 10h6v4H9z"></path></svg>
+      Безопасная Остановка
+    </button>
+    <button class="btn-force" id="btn-force">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+      Принудительное Закрытие
+    </button>
+    <button class="btn-close" id="btn-close" style="background-color: var(--bg-panel); border: 1px solid var(--text-muted);">
+      Закрыть Лаунчер
+    </button>
+  </div>
+
+  <div class="terminal-container" id="terminal">
+    <div class="log-line log-info">Ожидание запуска системы... Вывод логов появится здесь.</div>
+  </div>
+
+  <script>
+    const btnStart = document.getElementById('btn-start');
+    const btnRestart = document.getElementById('btn-restart');
+    const btnStop = document.getElementById('btn-stop');
+    const btnForce = document.getElementById('btn-force');
+    const btnClose = document.getElementById('btn-close');
+    const terminal = document.getElementById('terminal');
+    const alertBox = document.getElementById('error-alert');
+
+    function appendLog(text) {
+      const lines = text.split('\n').filter(l => l.trim().length > 0);
+      lines.forEach(line => {
+        const div = document.createElement('div');
+        div.className = 'log-line';
+        if (line.toLowerCase().includes('error') || line.toLowerCase().includes('fail')) {
+          div.classList.add('log-error');
+        }
+        div.textContent = line;
+        terminal.appendChild(div);
+      });
+      // Auto-scroll
+      if (terminal.childElementCount > 500) {
+        for (let i = 0; i < 50; i++) terminal.removeChild(terminal.firstChild);
+      }
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function showError(msg) {
+      alertBox.textContent = msg;
+      alertBox.style.display = 'block';
+      setTimeout(() => alertBox.style.display = 'none', 5000);
+    }
+
+    btnStart.addEventListener('click', async () => {
+      btnStart.disabled = true;
+      try {
+        await window.api.startApp();
+        window.api.startLogs();
+      } catch (err) {
+        showError('Ошибка запуска: ' + err);
+      } finally {
+        btnStart.disabled = false;
+      }
+    });
+
+    btnRestart.addEventListener('click', async () => {
+      try {
+        btnRestart.disabled = true;
+        appendLog('\n[System] Перезагрузка CRM (pm2 restart all)...\n');
+        await window.api.restartApp();
+        setTimeout(() => window.api.openApp(), 2000);
+      } catch (e) {
+        showError('Ошибка перезагрузки: ' + e);
+      } finally {
+        setTimeout(() => btnRestart.disabled = false, 3000);
+      }
+    });
+
+    btnStop.addEventListener('click', async () => {
+      btnStop.disabled = true;
+      try {
+        await window.api.safeStop();
+        appendLog('\n[System] Безопасная остановка завершена.\n');
+      } catch (err) {
+        showError(err);
+        appendLog('\n[Error] Остановка отменена: ' + err + '\n');
+      } finally {
+        btnStop.disabled = false;
+      }
+    });
+
+    btnForce.addEventListener('click', async () => {
+      if(confirm('Вы уверены? Принудительное закрытие может прервать важные процессы.')) {
+        btnForce.disabled = true;
+        await window.api.forceStop();
+        appendLog('\n[System] Все процессы принудительно убиты.\n');
+        btnForce.disabled = false;
+      }
+    });
+
+    btnClose.addEventListener('click', () => {
+      window.api.closeLauncher();
+    });
+
+    // Start streaming logs automatically
+    window.api.onLogData((data) => appendLog(data));
+    window.api.startLogs();
+
+  </script>
+</body>
+</html>

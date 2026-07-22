@@ -1,0 +1,256 @@
+import React, { useState, useEffect } from 'react';
+import { socket } from '../services/socket';
+
+interface LogItem {
+  id: string;
+  name?: string;
+  phone?: string;
+  msg: string;
+  type: 'success' | 'error' | 'warn' | 'skip';
+  time: string;
+}
+
+interface Campaign {
+  id: number;
+  name: string;
+  leadsCount: number;
+  // We can roughly assume this has leads ready
+}
+
+interface Account {
+  id: string;
+  name: string;
+  status: string;
+  allow_sender: number;
+}
+
+interface Stats {
+  sent: number;
+  errors: number;
+  skipped: number;
+  total: number;
+}
+
+export function Sender() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | ''>('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(''); // empty means all allowed
+  
+  const [minDelay, setMinDelay] = useState(15);
+  const [maxDelay, setMaxDelay] = useState(45);
+  
+  const [logs, setLogs] = useState<LogItem[]>([]);
+  const [stats, setStats] = useState<Stats>({ sent: 0, errors: 0, skipped: 0, total: 0 });
+  const [isRunning, setIsRunning] = useState(false);
+
+  useEffect(() => {
+    // Load initial data
+    Promise.all([
+      fetch(`http://${window.location.hostname}:3001/api/campaigns`).then(r => r.json()),
+      fetch(`http://${window.location.hostname}:3001/api/accounts`).then(r => r.json()),
+      fetch(`http://${window.location.hostname}:3001/api/settings`).then(r => r.json()),
+      fetch(`http://${window.location.hostname}:3001/api/sender/status`).then(r => r.json())
+    ]).then(([cData, aData, sData, statusData]) => {
+      setCampaigns(cData);
+      setAccounts(aData.filter((a: Account) => a.allow_sender === 1 && a.status === 'online'));
+      
+      if (sData.sender_min_delay_sec) setMinDelay(Number(sData.sender_min_delay_sec));
+      if (sData.sender_max_delay_sec) setMaxDelay(Number(sData.sender_max_delay_sec));
+
+      if (statusData) {
+        setIsRunning(statusData.running);
+        if (statusData.stats) setStats(statusData.stats);
+      }
+    }).catch(err => console.error('Failed to load initial data', err));
+
+    // Socket events
+    const onStarted = (data: any) => {
+      setIsRunning(true);
+      addLog({ id: Date.now().toString(), msg: `Запущена рассылка: ${data.total} лидов, ${data.accounts} аккаунтов`, type: 'success', time: new Date().toLocaleTimeString() });
+    };
+    const onLog = (data: any) => {
+      addLog({
+        id: Date.now().toString() + Math.random(),
+        msg: data.message,
+        type: data.type,
+        time: new Date().toLocaleTimeString(),
+        name: data.name,
+        phone: data.phone
+      });
+    };
+    const onStats = (data: Stats) => setStats(data);
+    const onPaused = (data: Stats) => {
+      setIsRunning(false);
+      setStats(data);
+      addLog({ id: Date.now().toString(), msg: `Рассылка поставлена на паузу`, type: 'warn', time: new Date().toLocaleTimeString() });
+    };
+    const onDone = (data: Stats) => {
+      setIsRunning(false);
+      setStats(data);
+      addLog({ id: Date.now().toString(), msg: `Рассылка завершена`, type: 'success', time: new Date().toLocaleTimeString() });
+    };
+    const onError = (data: any) => {
+      setIsRunning(false);
+      addLog({ id: Date.now().toString(), msg: `Критическая ошибка: ${data.message}`, type: 'error', time: new Date().toLocaleTimeString() });
+    };
+
+    socket.on('sender:started', onStarted);
+    socket.on('sender:log', onLog);
+    socket.on('sender:stats', onStats);
+    socket.on('sender:paused', onPaused);
+    socket.on('sender:done', onDone);
+    socket.on('sender:error', onError);
+
+    return () => {
+      socket.off('sender:started', onStarted);
+      socket.off('sender:log', onLog);
+      socket.off('sender:stats', onStats);
+      socket.off('sender:paused', onPaused);
+      socket.off('sender:done', onDone);
+      socket.off('sender:error', onError);
+    };
+  }, []);
+
+  const addLog = (log: LogItem) => {
+    setLogs(prev => [log, ...prev].slice(0, 100)); // keep last 100
+  };
+
+  const startSending = async () => {
+    try {
+      // Save settings first
+      await fetch(`http://${window.location.hostname}:3001/api/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          sender_min_delay_sec: minDelay,
+          sender_max_delay_sec: maxDelay
+        })
+      });
+
+      // Start sending
+      const res = await fetch(`http://${window.location.hostname}:3001/api/sender/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaign_id: selectedCampaignId || null,
+          account_ids: selectedAccountId ? [selectedAccountId] : null
+        })
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка при старте');
+    }
+  };
+
+  const pauseSending = async () => {
+    try {
+      await fetch(`http://${window.location.hostname}:3001/api/sender/pause`, { method: 'POST' });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Рассылка</h1>
+          <div className="text-secondary mt-1">Автоматическая отправка сообщений по базам</div>
+        </div>
+      </div>
+
+      <div className="page-body flex flex-col gap-6">
+        
+        <div className="card" style={{ padding: '2rem' }}>
+          <span className="card-title mb-6">Настройка кампании</span>
+          <div className="grid-2 mb-6" style={{ gap: '2rem' }}>
+            <div>
+              <label className="form-label mb-2">База лидов</label>
+              <select className="form-select" disabled={isRunning} value={selectedCampaignId} onChange={e => setSelectedCampaignId(Number(e.target.value) || '')}>
+                <option value="">Все готовые лиды из всех баз</option>
+                {campaigns.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} (Всего лидов: {c.leadsCount})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="form-label mb-2">Используемые аккаунты</label>
+              <select className="form-select" disabled={isRunning} value={selectedAccountId} onChange={e => setSelectedAccountId(e.target.value)}>
+                <option value="">Все доступные онлайн-аккаунты ({accounts.length})</option>
+                {accounts.map(a => (
+                  <option key={a.id} value={a.id}>{a.name || a.id}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          <div className="mb-6">
+            <label className="form-label mb-2">Задержка между сообщениями (сек)</label>
+            <div className="flex gap-4 items-center" style={{ maxWidth: '320px' }}>
+              <input type="number" className="form-input w-full" disabled={isRunning} value={minDelay} onChange={e => setMinDelay(Number(e.target.value))} />
+              <span className="text-secondary">—</span>
+              <input type="number" className="form-input w-full" disabled={isRunning} value={maxDelay} onChange={e => setMaxDelay(Number(e.target.value))} />
+            </div>
+            <div className="text-sm text-secondary mt-2">Каждое сообщение отправляется со случайной задержкой в этом диапазоне, имитируя человека.</div>
+          </div>
+
+          <div className="flex gap-4 pt-6" style={{ borderTop: '1px solid var(--color-border-weak)' }}>
+            {!isRunning ? (
+              <button onClick={startSending} className="btn btn-primary flex-1" style={{ maxWidth: '240px', justifyContent: 'center', padding: '12px' }}>
+                ▶ Запустить рассылку
+              </button>
+            ) : (
+              <button onClick={pauseSending} className="btn btn-secondary flex-1" style={{ maxWidth: '240px', justifyContent: 'center', padding: '12px' }}>
+                ⏸ Пауза
+              </button>
+            )}
+            
+            <div className="flex gap-6 items-center ml-auto">
+              <div className="flex flex-col">
+                <span className="text-secondary text-sm">Отправлено</span>
+                <span style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-primary)' }}>{stats.sent}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-secondary text-sm">Ошибки</span>
+                <span style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-error)' }}>{stats.errors}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-secondary text-sm">Всего</span>
+                <span style={{ fontSize: '1.25rem', fontWeight: 600 }}>{stats.total}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card flex flex-col" style={{ padding: '2rem', flex: 1, minHeight: '400px' }}>
+          <span className="card-title mb-6">Live Монитор</span>
+          
+          <div className="flex flex-col gap-4 overflow-y-auto" style={{ maxHeight: '600px' }}>
+            {logs.length === 0 && <div className="text-secondary text-center py-10">Лог рассылки пуст...</div>}
+            
+            {logs.map(item => (
+              <div key={item.id} className="flex justify-between items-center p-4 rounded-xl border" style={{ backgroundColor: '#F9FAFB', borderColor: 'var(--color-border-weak)' }}>
+                <div className="flex items-center gap-4 flex-1">
+                  <div className="mono text-sm text-secondary" style={{ width: '70px' }}>{item.time}</div>
+                  <div className="text-sm" style={{ color: '#111827', flex: 1 }}>{item.msg}</div>
+                </div>
+                <div style={{ width: '100px', textAlign: 'right' }}>
+                  {item.type === 'success' && <span className="badge badge-online">Успешно</span>}
+                  {item.type === 'error' && <span className="badge" style={{ backgroundColor: 'var(--color-error-bg)', color: 'var(--color-error)' }}>Ошибка</span>}
+                  {item.type === 'warn' && <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>Внимание</span>}
+                  {item.type === 'skip' && <span className="badge badge-new">Пропущено</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
