@@ -62,6 +62,7 @@ data/telegram/
 data/downloads/
 data/tmp/
 data/debug_screenshots/
+data/map-lead-cache.json
 # Сессии WhatsApp (Baileys)
 backend/sessions/
 backend/backend/sessions/

@@ -4,6 +4,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { io } from '../../server.js';
 import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
 import { hasActiveMapLeadFilters, matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
+import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
 
 const playwrightExtra = addExtra(chromium);
 playwrightExtra.use(StealthPlugin());
@@ -181,6 +182,17 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
       for (const sourceUrl of newLinks) {
         if (shouldStop || matchedCount >= targetCount) break;
         try {
+          const cachedLead = await getCachedMapLead('yandex_maps', sourceUrl);
+          if (cachedLead) {
+            candidatesChecked++;
+            if (matchesMapLeadFilters(cachedLead, filters)) {
+              matchedCount++;
+              io.emit('parser:lead', { lead: cachedLead });
+              io.emit('parser:log', { message: `[${matchedCount}/${targetCount}] Из памяти: ${cachedLead.name}`, type: 'success' });
+            }
+            continue;
+          }
+
           await detailsPage.goto(sourceUrl, { waitUntil: 'domcontentloaded', timeout: 35_000 });
           await detailsPage.waitForSelector('h1', { timeout: 12_000 });
           await sleep(500, 900);
@@ -196,6 +208,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
             isClaimed: true,
             platform: 'yandex_maps',
           };
+          await rememberMapLead(lead);
           candidatesChecked++;
           if (matchesMapLeadFilters(lead, filters)) {
             matchedCount++;

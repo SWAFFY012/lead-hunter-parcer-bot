@@ -7,6 +7,7 @@ import { systemLog } from '../../utils/logger.js';
 import { getProfile, buildContextOptions, applyFingerprintScripts } from '../fingerprint/profileManager.js';
 import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
 import { hasActiveMapLeadFilters, matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
+import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
 
 const playwrightExtra = addExtra(chromium);
 playwrightExtra.use(StealthPlugin());
@@ -138,6 +139,17 @@ export async function startGoogleMapsParsing(options) {
         }
 
         try {
+          const cachedLead = await getCachedMapLead('google_maps', placeUrl);
+          if (cachedLead) {
+            candidatesChecked++;
+            if (matchesMapLeadFilters(cachedLead, filters)) {
+              matchedCount++;
+              io.emit('parser:lead', { lead: cachedLead });
+              io.emit('parser:log', { message: `[${matchedCount}/${targetCount}] Из памяти: ${cachedLead.name}`, type: 'success' });
+            }
+            continue;
+          }
+
           await detailsPage.goto(placeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
           await sleep(900, 1600);
         
@@ -218,6 +230,7 @@ export async function startGoogleMapsParsing(options) {
           socialLinks,
           platform: 'google_maps',
         };
+        await rememberMapLead(lead);
         candidatesChecked++;
         const isMatch = matchesMapLeadFilters(lead, filters);
         if (isMatch) {
