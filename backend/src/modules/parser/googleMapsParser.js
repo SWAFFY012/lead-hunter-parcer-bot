@@ -6,7 +6,7 @@ import { io } from '../../server.js';
 import { systemLog } from '../../utils/logger.js';
 import { getProfile, buildContextOptions, applyFingerprintScripts } from '../fingerprint/profileManager.js';
 import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
-import { hasActiveMapLeadFilters, matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
+import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
 import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
 
 const playwrightExtra = addExtra(chromium);
@@ -109,7 +109,6 @@ export async function startGoogleMapsParsing(options) {
       else route.continue();
     });
     const totalPlacesFound = new Set();
-    const maxScrolls = Math.min(120, Math.max(20, Math.ceil(targetCount * (hasActiveMapLeadFilters(filters) ? 4 : 2))));
     let matchedCount = 0;
     let candidatesChecked = 0;
     let consecutiveEmptyScrolls = 0;
@@ -119,7 +118,7 @@ export async function startGoogleMapsParsing(options) {
       type: 'info',
     });
 
-    for (let scrollIndex = 0; scrollIndex < maxScrolls && matchedCount < targetCount; scrollIndex++) {
+    for (let scrollIndex = 0; matchedCount < targetCount; scrollIndex++) {
       if (shouldStop) break;
       const feedLinks = await page.evaluate(() => Array.from(document.querySelectorAll('a[href*="/maps/place/"]')).map((link) => link.href));
       const newLinks = feedLinks.filter((link) => {
@@ -274,7 +273,7 @@ export async function startGoogleMapsParsing(options) {
         io.emit('parser:progress', {
           platform: 'google_maps',
           currentPage: scrollIndex + 1,
-          totalPages: maxScrolls,
+          totalPages: 0,
           matchedCount,
           candidatesChecked,
           targetCount,

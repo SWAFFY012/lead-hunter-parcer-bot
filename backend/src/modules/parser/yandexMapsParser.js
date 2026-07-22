@@ -3,7 +3,7 @@ import { addExtra } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { io } from '../../server.js';
 import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
-import { hasActiveMapLeadFilters, matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
+import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
 import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
 
 const playwrightExtra = addExtra(chromium);
@@ -148,7 +148,6 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
     const paginationUrls = await searchPage.locator('a[href*="/search/"][href*="page="]')
       .evaluateAll((links) => [...new Set(links.map((link) => link.href))]);
     const paginationTemplate = paginationUrls[0] || firstResultsUrl;
-    const maxPages = Math.min(50, Math.max(5, Math.ceil(targetCount * (hasActiveMapLeadFilters(filters) ? 1.5 : 0.7))));
     const detailsPage = await context.newPage();
     await detailsPage.route('**/*', (route) => {
       const type = route.request().resourceType();
@@ -162,7 +161,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
     let consecutiveEmptyPages = 0;
     io.emit('parser:log', { message: `Ищем ${targetCount} компаний, подходящих под выбранные фильтры.`, type: 'info' });
 
-    for (let pageIndex = 0; pageIndex < maxPages && matchedCount < targetCount; pageIndex++) {
+    for (let pageIndex = 0; matchedCount < targetCount; pageIndex++) {
       if (shouldStop) break;
       if (pageIndex > 0) {
         const nextPageUrl = new URL(paginationTemplate);
@@ -223,7 +222,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
       io.emit('parser:progress', {
         platform: 'yandex_maps',
         currentPage: pageIndex + 1,
-        totalPages: maxPages,
+        totalPages: 0,
         matchedCount,
         candidatesChecked,
         targetCount,
