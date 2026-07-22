@@ -34,6 +34,7 @@ async function collectOrganizationLinks(page) {
 }
 
 async function collectCardSocials(page) {
+  const collectedUrls = [];
   for (const name of socialNames) {
     const button = page.getByRole('button', { name: new RegExp(`Соцсети, ${name}`, 'i') }).first();
     if (await button.count() === 0) continue;
@@ -43,7 +44,10 @@ async function collectCardSocials(page) {
       element.textContent || '',
     ]).catch(() => []);
     const embeddedLinks = collectSocialLinks(embeddedUrls.filter((value) => allowedSocialUrl.test(value)));
-    if (embeddedLinks.length) return [embeddedLinks[0]];
+    if (embeddedLinks.length) {
+      collectedUrls.push(embeddedLinks[0].url);
+      continue;
+    }
 
     const context = page.context();
     const requestedUrls = [];
@@ -69,13 +73,13 @@ async function collectCardSocials(page) {
       const socialLinks = collectSocialLinks(
         requestedUrls.filter((url) => allowedSocialUrl.test(url) && !/t\.me\/mapsyandex/i.test(url))
       );
-      if (socialLinks.length) return [socialLinks[0]];
+      if (socialLinks.length) collectedUrls.push(socialLinks[0].url);
     } finally {
       context.off('request', captureSocialRequest);
       await popup?.close().catch(() => {});
     }
   }
-  return [];
+  return collectSocialLinks(collectedUrls);
 }
 
 async function extractCard(page) {
