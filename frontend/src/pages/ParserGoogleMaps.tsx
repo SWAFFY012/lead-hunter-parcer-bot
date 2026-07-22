@@ -19,6 +19,7 @@ interface MapLead {
   sourceUrl: string;
   isClaimed: boolean;
   platform: 'google_maps' | 'yandex_maps';
+  savedAt?: string;
 }
 
 type PresenceFilter = 'all' | 'with' | 'without';
@@ -58,7 +59,7 @@ function companyWord(count: number) {
   return 'подходящих компаний';
 }
 
-function downloadCsv(leads: MapLead[], provider: MapsProvider) {
+function downloadCsv(leads: MapLead[], provider: MapsProvider | 'saved') {
   const rows = [
     ['Название', 'Категория', 'Телефон', 'Сайт', 'Соцсети', 'Рейтинг', 'Адрес', 'Описание', 'Карточка'],
     ...leads.map((lead) => [
@@ -86,6 +87,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const navigate = useNavigate();
   const config = providerConfig[provider];
   const api = `http://${window.location.hostname}:3001/api/${config.endpoint}`;
+  const savedApi = `http://${window.location.hostname}:3001/api/saved-map-leads`;
   const [query, setQuery] = useState(() => localStorage.getItem(`${config.storage}_query`) || '');
   const [targetCount, setTargetCount] = useState(() => {
     const savedTarget = Number(localStorage.getItem(`${config.storage}_target_v2`));
@@ -100,6 +102,9 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [progress, setProgress] = useState<ParserProgress>({ current: 0, total: 0, matched: 0, checked: 0, target: targetCount });
   const [error, setError] = useState('');
   const [showLogs, setShowLogs] = useState(false);
+  const [savedLeads, setSavedLeads] = useState<MapLead[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [savedNotice, setSavedNotice] = useState('');
 
   useEffect(() => {
     localStorage.setItem(`${config.storage}_query`, query);
@@ -108,6 +113,17 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
     localStorage.setItem(`${config.storage}_phone`, phoneFilter);
     localStorage.setItem(`${config.storage}_socials`, socialFilter);
   }, [config.storage, phoneFilter, query, socialFilter, targetCount, websiteFilter]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(savedApi, { signal: controller.signal })
+      .then((response) => response.json())
+      .then((data: { leads?: MapLead[] }) => setSavedLeads(data.leads || []))
+      .catch((requestError: Error) => {
+        if (requestError.name !== 'AbortError') setError('Не удалось загрузить сохранённые компании.');
+      });
+    return () => controller.abort();
+  }, [savedApi]);
 
   useEffect(() => {
     const onStarted = (data: { platform: string; targetCount?: number }) => {
@@ -196,7 +212,46 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
     setLoading(false);
   };
 
+  const saveCompanies = async (companies: MapLead[]) => {
+    if (!companies.length) return;
+    setSaving(true);
+    setSavedNotice('');
+    try {
+      const response = await fetch(savedApi, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leads: companies }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось сохранить компании.');
+      setSavedLeads(data.leads || []);
+      setSavedNotice(companies.length === 1 ? 'Компания сохранена для дальнейшей работы.' : `Сохранено компаний: ${companies.length}.`);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось сохранить компании.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeSavedCompany = async (lead: MapLead) => {
+    if (!window.confirm(`Убрать «${lead.name || 'компанию'}» из сохранённых?`)) return;
+    try {
+      const response = await fetch(savedApi, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: lead.platform, sourceUrl: lead.sourceUrl }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось удалить компанию.');
+      setSavedLeads(data.leads || []);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось удалить компанию.');
+    }
+  };
+
   const progressPercent = progress.target ? Math.min(100, Math.round((progress.matched / progress.target) * 100)) : 0;
+  const savedSourceUrls = new Set(savedLeads.map((lead) => lead.sourceUrl));
+  const unsavedLeads = leads.filter((lead) => !savedSourceUrls.has(lead.sourceUrl));
 
   return (
     <div className={`maps-page ${provider}`}>
@@ -252,19 +307,40 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
             <div><span className="panel-label">РЕЗУЛЬТАТ ПО УСЛОВИЯМ</span><h2>Подходящие компании</h2></div>
             <div className="result-metrics"><span><b>{leads.length}</b> найдено</span><span><b>{progress.checked}</b> проверено</span><span><b>{progress.target || targetCount}</b> цель</span></div>
           </div>
-          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button></div>
-          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th></tr></thead><tbody>
+          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button></div></div>
+          {savedNotice ? <div className="maps-saved-notice">✓ {savedNotice}</div> : null}
+          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th><th>Сохранение</th></tr></thead><tbody>
             {leads.map((lead) => <tr key={lead.sourceUrl}>
               <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.title}</small></td>
               <td>{lead.phone || '—'}</td>
               <td>{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Открыть сайт</a> : <span className="maps-missing">Нет сайта</span>}</td>
               <td><div className="maps-socials">{lead.socialLinks?.length ? lead.socialLinks.map((social) => <a key={social.url} href={social.url} target="_blank" rel="noreferrer">{social.platform}</a>) : <span className="maps-missing">Не найдены</span>}</div></td>
               <td>{lead.address || '—'}</td><td>{lead.rating || '—'}</td>
+              <td><button className={`maps-save-button ${savedSourceUrls.has(lead.sourceUrl) ? 'saved' : ''}`} onClick={() => saveCompanies([lead])} disabled={savedSourceUrls.has(lead.sourceUrl) || saving}>{savedSourceUrls.has(lead.sourceUrl) ? '✓ Сохранено' : 'Сохранить'}</button></td>
             </tr>)}
-            {!leads.length ? <tr><td colSpan={6} className="telegram-empty">{loading ? `Проверяем выдачу: найдено ${progress.matched} из ${progress.target}…` : 'Настройте условия и запустите поиск'}</td></tr> : null}
+            {!leads.length ? <tr><td colSpan={7} className="telegram-empty">{loading ? `Проверяем выдачу: найдено ${progress.matched} из ${progress.target}…` : 'Настройте условия и запустите поиск'}</td></tr> : null}
           </tbody></table></div>
           <button className="maps-log-toggle" onClick={() => setShowLogs((visible) => !visible)}>{showLogs ? 'Скрыть журнал' : `Показать журнал (${logs.length})`}</button>
           {showLogs ? <div className="maps-logs">{logs.length ? logs.map((log, index) => <div key={`${index}-${log}`}>{log}</div>) : <div>Ждём запуска парсера…</div>}</div> : null}
+        </section>
+
+        <section className="telegram-results maps-saved-results">
+          <div className="results-heading">
+            <div><span className="panel-label">МОЯ БАЗА ДЛЯ СВЯЗИ</span><h2>Сохранённые компании</h2><p>Контакты останутся здесь после нового поиска и перезапуска.</p></div>
+            <div className="saved-count"><b>{savedLeads.length}</b><span>в работе</span></div>
+          </div>
+          <div className="maps-result-actions"><span>Можно позвонить или написать позже — список хранится на этом компьютере.</span><button className="btn btn-secondary" onClick={() => downloadCsv(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать сохранённые</button></div>
+          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Соцсети</th><th>Сайт</th><th>Сохранено</th><th></th></tr></thead><tbody>
+            {savedLeads.map((lead) => <tr key={`${lead.platform}:${lead.sourceUrl}`}>
+              <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.platform === 'yandex_maps' ? 'Яндекс Карты' : 'Google Карты'} · {lead.address || 'Адрес не указан'}</small></td>
+              <td>{lead.phone ? <a href={`tel:${lead.phone}`}>{lead.phone}</a> : '—'}</td>
+              <td><div className="maps-socials">{lead.socialLinks?.length ? lead.socialLinks.map((social) => <a key={social.url} href={social.url} target="_blank" rel="noreferrer">{social.platform}</a>) : <span className="maps-missing">Не найдены</span>}</div></td>
+              <td>{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Открыть сайт</a> : <span className="maps-missing">Нет сайта</span>}</td>
+              <td>{lead.savedAt ? new Date(lead.savedAt).toLocaleDateString('ru-RU') : 'Сегодня'}</td>
+              <td><button className="maps-remove-button" onClick={() => removeSavedCompany(lead)}>Убрать</button></td>
+            </tr>)}
+            {!savedLeads.length ? <tr><td colSpan={6} className="telegram-empty">Сохраните нужные компании из результатов — они появятся здесь.</td></tr> : null}
+          </tbody></table></div>
         </section>
       </main>
     </div>

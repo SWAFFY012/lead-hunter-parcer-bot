@@ -30,6 +30,7 @@ import systemRoutes from './routes/system.js';
 import telegramRoutes from './routes/telegram.js';
 import googleMapsRoutes from './routes/googleMaps.js';
 import yandexMapsRoutes from './routes/yandexMaps.js';
+import savedMapLeadsRoutes from './routes/savedMapLeads.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -61,7 +62,7 @@ if (databaseConfigured) {
 app.get('/api/health', (_req, res) => res.json({ ok: true, databaseConfigured, ts: Date.now() }));
 
 app.use('/api', (req, res, next) => {
-  const worksWithoutDatabase = req.path.startsWith('/telegram') || req.path.startsWith('/google-maps') || req.path.startsWith('/yandex-maps');
+  const worksWithoutDatabase = req.path.startsWith('/telegram') || req.path.startsWith('/google-maps') || req.path.startsWith('/yandex-maps') || req.path.startsWith('/saved-map-leads');
   if (!databaseConfigured && !worksWithoutDatabase) {
     return res.status(503).json({
       ok: false,
@@ -85,6 +86,7 @@ app.use('/api/system', systemRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/google-maps', googleMapsRoutes);
 app.use('/api/yandex-maps', yandexMapsRoutes);
+app.use('/api/saved-map-leads', savedMapLeadsRoutes);
 
 import { startFollowupManager } from './modules/sender/followupManager.js';
 

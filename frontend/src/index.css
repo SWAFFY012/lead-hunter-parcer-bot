@@ -270,6 +270,22 @@ body {
 .maps-filter-settings select { width: 100%; }
 .maps-result-actions { min-height: 58px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-block: 1px solid #e2e8f0; background: #f8fafc; }
 .maps-result-actions span { color: #64748b; font-size: 11px; }
+.maps-action-buttons { display: flex; align-items: center; gap: 8px; }
+.maps-action-buttons .btn { white-space: nowrap; }
+.maps-action-buttons .btn-primary { background: #0f766e; }
+.maps-action-buttons .btn-primary:hover { background: #115e59; }
+.maps-saved-notice { padding: 10px 16px; border-bottom: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; font-size: 11px; font-weight: 700; }
+.maps-save-button, .maps-remove-button { border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #334155; padding: 6px 9px; cursor: pointer; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.maps-save-button:hover { border-color: #0f766e; color: #0f766e; background: #f0fdfa; }
+.maps-save-button.saved { border-color: #99f6e4; background: #f0fdfa; color: #0f766e; cursor: default; }
+.maps-remove-button { border-color: transparent; color: #94a3b8; }
+.maps-remove-button:hover { color: #b91c1c; background: #fef2f2; }
+.maps-saved-results { margin-top: 22px; border-top: 3px solid #0f766e; }
+.maps-saved-results .panel-label { color: #0f766e; }
+.maps-saved-results .results-heading p { margin-top: 5px; color: #64748b; font-size: 11px; }
+.saved-count { min-width: 92px; padding: 10px 14px; border: 1px solid #ccfbf1; background: #f0fdfa; text-align: center; }
+.saved-count b { display: block; color: #115e59; font-size: 24px; line-height: 1; }
+.saved-count span { color: #0f766e; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
 .maps-category { display: block; color: #94a3b8; margin-top: 3px; font-size: 10px; }
 .maps-missing { display: inline-block; color: #b45309; background: #fffbeb; padding: 3px 6px; border-radius: 4px; font-size: 10px; }
 .maps-socials { display: flex; flex-wrap: wrap; gap: 4px; min-width: 130px; }
@@ -307,6 +323,7 @@ body {
   .maps-filter-bar, .telegram-contact-toolbar { align-items: stretch; flex-direction: column; }
   .maps-filter-bar .btn { margin-left: 0; }
   .maps-result-actions { align-items: stretch; flex-direction: column; }
+  .maps-action-buttons { width: 100%; align-items: stretch; flex-direction: column; }
   .telegram-result-filters { flex-wrap: wrap; }
 }
 
