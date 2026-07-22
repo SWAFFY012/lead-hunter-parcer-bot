@@ -111,6 +111,7 @@ export async function startGoogleMapsParsing(options) {
     const totalPlacesFound = new Set();
     let matchedCount = 0;
     let candidatesChecked = 0;
+    let duplicatesSkipped = 0;
     let consecutiveEmptyScrolls = 0;
 
     io.emit('parser:log', {
@@ -140,12 +141,7 @@ export async function startGoogleMapsParsing(options) {
         try {
           const cachedLead = await getCachedMapLead('google_maps', placeUrl);
           if (cachedLead) {
-            candidatesChecked++;
-            if (matchesMapLeadFilters(cachedLead, filters)) {
-              matchedCount++;
-              io.emit('parser:lead', { lead: cachedLead });
-              io.emit('parser:log', { message: `[${matchedCount}/${targetCount}] Из памяти: ${cachedLead.name}`, type: 'success' });
-            }
+            duplicatesSkipped++;
             continue;
           }
 
@@ -276,6 +272,7 @@ export async function startGoogleMapsParsing(options) {
           totalPages: 0,
           matchedCount,
           candidatesChecked,
+          duplicatesSkipped,
           targetCount,
         });
       }
@@ -294,8 +291,8 @@ export async function startGoogleMapsParsing(options) {
     const finishType = matchedCount >= targetCount ? 'success' : 'warn';
     io.emit('parser:log', {
       message: matchedCount >= targetCount
-        ? `Готово: найдено ${matchedCount} подходящих компаний.`
-        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount} подходящих компаний, проверено ${candidatesChecked}.`,
+        ? `Готово: найдено ${matchedCount} новых подходящих компаний, пропущено из памяти ${duplicatesSkipped}.`
+        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount} новых подходящих компаний, проверено ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}.`,
       type: finishType,
     });
 

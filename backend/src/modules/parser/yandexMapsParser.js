@@ -158,6 +158,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
     const organizations = new Set();
     let matchedCount = 0;
     let candidatesChecked = 0;
+    let duplicatesSkipped = 0;
     let consecutiveEmptyPages = 0;
     io.emit('parser:log', { message: `Ищем ${targetCount} компаний, подходящих под выбранные фильтры.`, type: 'info' });
 
@@ -183,12 +184,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
         try {
           const cachedLead = await getCachedMapLead('yandex_maps', sourceUrl);
           if (cachedLead) {
-            candidatesChecked++;
-            if (matchesMapLeadFilters(cachedLead, filters)) {
-              matchedCount++;
-              io.emit('parser:lead', { lead: cachedLead });
-              io.emit('parser:log', { message: `[${matchedCount}/${targetCount}] Из памяти: ${cachedLead.name}`, type: 'success' });
-            }
+            duplicatesSkipped++;
             continue;
           }
 
@@ -225,10 +221,11 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
         totalPages: 0,
         matchedCount,
         candidatesChecked,
+        duplicatesSkipped,
         targetCount,
       });
       io.emit('parser:log', {
-        message: `Страница ${pageIndex + 1}: проверено ${candidatesChecked}, подходит ${matchedCount}.`,
+        message: `Страница ${pageIndex + 1}: проверено новых ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}, подходит ${matchedCount}.`,
         type: 'info',
       });
       if (consecutiveEmptyPages >= 2) break;
@@ -236,8 +233,8 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
 
     io.emit('parser:log', {
       message: matchedCount >= targetCount
-        ? `Готово: найдено ${matchedCount} подходящих компаний.`
-        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount} подходящих компаний, проверено ${candidatesChecked}.`,
+        ? `Готово: найдено ${matchedCount} новых подходящих компаний, пропущено из памяти ${duplicatesSkipped}.`
+        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount} новых подходящих компаний, проверено ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}.`,
       type: matchedCount >= targetCount ? 'success' : 'warn',
     });
   } catch (error) {
