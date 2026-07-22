@@ -34,7 +34,6 @@ async function collectOrganizationLinks(page) {
 }
 
 async function collectCardSocials(page) {
-  const urls = [];
   for (const name of socialNames) {
     const button = page.getByRole('button', { name: new RegExp(`Соцсети, ${name}`, 'i') }).first();
     if (await button.count() === 0) continue;
@@ -43,21 +42,40 @@ async function collectCardSocials(page) {
       ...Array.from(element.attributes).map((attribute) => attribute.value),
       element.textContent || '',
     ]).catch(() => []);
-    urls.push(...embeddedUrls.filter((value) => allowedSocialUrl.test(value)));
+    const embeddedLinks = collectSocialLinks(embeddedUrls.filter((value) => allowedSocialUrl.test(value)));
+    if (embeddedLinks.length) return [embeddedLinks[0]];
 
-    const clicked = await button.click({ timeout: 1500 }).then(() => true).catch(() => false);
-    if (!clicked) continue;
-    await sleep(40, 90);
-    const interceptedUrls = await page.evaluate(() => window.__leadHunterOpenedUrls?.splice(0) || []);
-    urls.push(...interceptedUrls.filter((url) => allowedSocialUrl.test(url)));
+    const context = page.context();
+    const requestedUrls = [];
+    const captureSocialRequest = (request) => {
+      if (allowedSocialUrl.test(request.url())) requestedUrls.push(request.url());
+    };
+    context.on('request', captureSocialRequest);
+    const popupPromise = page.waitForEvent('popup', { timeout: 2500 }).catch(() => null);
+    let popup = null;
 
-    const found = await page.locator('a[href]')
-      .evaluateAll((links) => links
-        .map((link) => link.href)
-        .filter((href) => /(?:t\.me|telegram\.me|wa\.me|whatsapp\.com|instagram\.com)/i.test(href)));
-    urls.push(...found.filter((url) => !/t\.me\/mapsyandex/i.test(url)));
+    try {
+      const clicked = await button.click({ timeout: 1500 }).then(() => true).catch(() => false);
+      if (!clicked) continue;
+      popup = await popupPromise;
+      if (popup) {
+        await popup.waitForLoadState('domcontentloaded', { timeout: 1800 }).catch(() => {});
+        await sleep(80, 140);
+        requestedUrls.push(popup.url());
+      }
+
+      const interceptedUrls = await page.evaluate(() => window.__leadHunterOpenedUrls?.splice(0) || []);
+      requestedUrls.push(...interceptedUrls);
+      const socialLinks = collectSocialLinks(
+        requestedUrls.filter((url) => allowedSocialUrl.test(url) && !/t\.me\/mapsyandex/i.test(url))
+      );
+      if (socialLinks.length) return [socialLinks[0]];
+    } finally {
+      context.off('request', captureSocialRequest);
+      await popup?.close().catch(() => {});
+    }
   }
-  return collectSocialLinks(urls);
+  return [];
 }
 
 async function extractCard(page) {
@@ -107,13 +125,6 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
       viewport: { width: 1366, height: 850 },
       locale: 'ru-RU',
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    });
-    await context.addInitScript(() => {
-      window.__leadHunterOpenedUrls = [];
-      window.open = (url) => {
-        if (url) window.__leadHunterOpenedUrls.push(String(url));
-        return null;
-      };
     });
     const searchPage = await context.newPage();
     await searchPage.route('**/*', (route) => {
