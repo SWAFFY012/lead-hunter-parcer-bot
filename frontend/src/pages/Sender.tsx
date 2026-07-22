@@ -31,6 +31,53 @@ interface Stats {
   total: number;
 }
 
+interface SenderStatus {
+  running?: boolean;
+  stats?: Stats;
+}
+
+interface SenderStartedPayload {
+  total: number;
+  accounts: number;
+}
+
+interface SenderLogPayload {
+  message: string;
+  type: LogItem['type'];
+  name?: string;
+  phone?: string;
+}
+
+interface SenderErrorPayload {
+  message: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getApiError(payload: unknown, fallback: string): string {
+  if (isRecord(payload)) {
+    const message = payload.error ?? payload.message;
+    if (typeof message === 'string' && message.length > 0) {
+      if (message.includes('Database is not configured')) {
+        return 'База данных не настроена. Добавьте SUPABASE_DB_URL в backend/.env и перезапустите сервер.';
+      }
+      return message;
+    }
+  }
+  return fallback;
+}
+
+async function fetchJson(url: string): Promise<unknown> {
+  const response = await fetch(url);
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(getApiError(payload, `Ошибка сервера: ${response.status}`));
+  }
+  return payload;
+}
+
 export function Sender() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -43,33 +90,58 @@ export function Sender() {
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [stats, setStats] = useState<Stats>({ sent: 0, errors: 0, skipped: 0, total: 0 });
   const [isRunning, setIsRunning] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    // Load initial data
-    Promise.all([
-      fetch(`http://${window.location.hostname}:3001/api/campaigns`).then(r => r.json()),
-      fetch(`http://${window.location.hostname}:3001/api/accounts`).then(r => r.json()),
-      fetch(`http://${window.location.hostname}:3001/api/settings`).then(r => r.json()),
-      fetch(`http://${window.location.hostname}:3001/api/sender/status`).then(r => r.json())
-    ]).then(([cData, aData, sData, statusData]) => {
-      setCampaigns(cData);
-      setAccounts(aData.filter((a: Account) => a.allow_sender === 1 && a.status === 'online'));
-      
-      if (sData.sender_min_delay_sec) setMinDelay(Number(sData.sender_min_delay_sec));
-      if (sData.sender_max_delay_sec) setMaxDelay(Number(sData.sender_max_delay_sec));
+    let isMounted = true;
+    const apiBase = `http://${window.location.hostname}:3001/api`;
 
-      if (statusData) {
-        setIsRunning(statusData.running);
-        if (statusData.stats) setStats(statusData.stats);
+    const loadInitialData = async () => {
+      try {
+        const [campaignsData, accountsData, settingsData, statusData] = await Promise.all([
+          fetchJson(`${apiBase}/campaigns`),
+          fetchJson(`${apiBase}/accounts`),
+          fetchJson(`${apiBase}/settings`),
+          fetchJson(`${apiBase}/sender/status`)
+        ]);
+
+        if (!isMounted) return;
+
+        setCampaigns(Array.isArray(campaignsData) ? campaignsData as Campaign[] : []);
+        setAccounts(
+          Array.isArray(accountsData)
+            ? (accountsData as Account[]).filter(account => account.allow_sender === 1 && account.status === 'online')
+            : []
+        );
+
+        if (isRecord(settingsData)) {
+          if (settingsData.sender_min_delay_sec) setMinDelay(Number(settingsData.sender_min_delay_sec));
+          if (settingsData.sender_max_delay_sec) setMaxDelay(Number(settingsData.sender_max_delay_sec));
+        }
+
+        if (isRecord(statusData)) {
+          const senderStatus = statusData as SenderStatus;
+          setIsRunning(Boolean(senderStatus.running));
+          if (senderStatus.stats) setStats(senderStatus.stats);
+        }
+        setLoadError('');
+      } catch (error) {
+        if (!isMounted) return;
+        const message = error instanceof Error ? error.message : 'Не удалось загрузить данные рассылки.';
+        setCampaigns([]);
+        setAccounts([]);
+        setLoadError(message);
       }
-    }).catch(err => console.error('Failed to load initial data', err));
+    };
+
+    void loadInitialData();
 
     // Socket events
-    const onStarted = (data: any) => {
+    const onStarted = (data: SenderStartedPayload) => {
       setIsRunning(true);
       addLog({ id: Date.now().toString(), msg: `Запущена рассылка: ${data.total} лидов, ${data.accounts} аккаунтов`, type: 'success', time: new Date().toLocaleTimeString() });
     };
-    const onLog = (data: any) => {
+    const onLog = (data: SenderLogPayload) => {
       addLog({
         id: Date.now().toString() + Math.random(),
         msg: data.message,
@@ -90,7 +162,7 @@ export function Sender() {
       setStats(data);
       addLog({ id: Date.now().toString(), msg: `Рассылка завершена`, type: 'success', time: new Date().toLocaleTimeString() });
     };
-    const onError = (data: any) => {
+    const onError = (data: SenderErrorPayload) => {
       setIsRunning(false);
       addLog({ id: Date.now().toString(), msg: `Критическая ошибка: ${data.message}`, type: 'error', time: new Date().toLocaleTimeString() });
     };
@@ -103,6 +175,7 @@ export function Sender() {
     socket.on('sender:error', onError);
 
     return () => {
+      isMounted = false;
       socket.off('sender:started', onStarted);
       socket.off('sender:log', onLog);
       socket.off('sender:stats', onStats);
@@ -165,6 +238,7 @@ export function Sender() {
       </div>
 
       <div className="page-body flex flex-col gap-6">
+        {loadError ? <div className="telegram-alert">{loadError}</div> : null}
         
         <div className="card" style={{ padding: '2rem' }}>
           <span className="card-title mb-6">Настройка кампании</span>
@@ -201,7 +275,7 @@ export function Sender() {
 
           <div className="flex gap-4 pt-6" style={{ borderTop: '1px solid var(--color-border-weak)' }}>
             {!isRunning ? (
-              <button onClick={startSending} className="btn btn-primary flex-1" style={{ maxWidth: '240px', justifyContent: 'center', padding: '12px' }}>
+              <button disabled={Boolean(loadError)} onClick={startSending} className="btn btn-primary flex-1" style={{ maxWidth: '240px', justifyContent: 'center', padding: '12px' }}>
                 ▶ Запустить рассылку
               </button>
             ) : (
