@@ -4,14 +4,7 @@ import { isIP } from 'net';
 const platformRules = [
   ['Telegram', /(?:^|\.)t\.me$|(?:^|\.)telegram\.me$|^tg:/i],
   ['WhatsApp', /(?:^|\.)wa\.me$|(?:^|\.)whatsapp\.com$|^whatsapp:/i],
-  ['VK', /(?:^|\.)vk\.com$/i],
   ['Instagram', /(?:^|\.)instagram\.com$/i],
-  ['Facebook', /(?:^|\.)facebook\.com$|(?:^|\.)fb\.com$/i],
-  ['YouTube', /(?:^|\.)youtube\.com$|(?:^|\.)youtu\.be$/i],
-  ['Одноклассники', /(?:^|\.)ok\.ru$/i],
-  ['Viber', /(?:^|\.)viber\.com$|^viber:/i],
-  ['TikTok', /(?:^|\.)tiktok\.com$/i],
-  ['X / Twitter', /(?:^|\.)x\.com$|(?:^|\.)twitter\.com$/i],
 ];
 
 function comparableAddress(address) {
@@ -47,7 +40,6 @@ export function collectSocialLinks(urls) {
     let url = String(rawUrl || '').replace(/&amp;/g, '&').trim();
     const platform = identifySocialPlatform(url);
     if (!platform) continue;
-    if (platform === 'YouTube' && /youtu\.be\/|youtube\.com\/(?:watch\?|embed\/|shorts\/)/i.test(url)) continue;
     try {
       const parsed = new URL(url);
       const hostname = parsed.hostname.replace(/^www\./i, '').toLowerCase();
@@ -55,19 +47,13 @@ export function collectSocialLinks(urls) {
       if (platform === 'WhatsApp') {
         const phone = (parsed.hostname.includes('wa.me') ? parsed.pathname : parsed.searchParams.get('phone') || '').replace(/\D/g, '');
         if (phone) url = `https://wa.me/${phone}`;
-      } else if (platform === 'YouTube') {
-        if (!segments[0] || (!segments[0].startsWith('@') && !['channel', 'c', 'user'].includes(segments[0]))) continue;
-        url = `https://${hostname}/${segments.slice(0, segments[0].startsWith('@') ? 1 : 2).join('/')}`;
-      } else if (platform === 'VK') {
-        if (!segments[0] || /^(?:topic|wall|video|photo|clip|market|album)/i.test(segments[0])) continue;
+      } else if (['Telegram', 'Instagram'].includes(platform) && segments[0]) {
         url = `https://${hostname}/${segments[0]}`;
-      } else if (['Telegram', 'Instagram', 'TikTok', 'X / Twitter'].includes(platform) && segments[0]) {
-        url = `https://${hostname}/${segments[0]}`;
-      } else if (['Telegram', 'VK', 'Instagram', 'Facebook', 'YouTube', 'Одноклассники', 'TikTok', 'X / Twitter'].includes(platform)) {
+      } else if (['Telegram', 'Instagram'].includes(platform)) {
         url = `https://${hostname}${parsed.pathname}`.replace(/\/$/, '');
       }
     } catch {
-      // Custom schemes such as viber:// are kept unchanged.
+      // Unsupported or malformed links are ignored by platform detection.
     }
     const key = `${platform}:${url.toLowerCase()}`;
     if (result.has(key)) continue;
@@ -84,7 +70,7 @@ async function fetchPublicPage(rawUrl, redirectsLeft = 3) {
   const url = await validatePublicUrl(rawUrl);
   const response = await fetch(url, {
     redirect: 'manual',
-    signal: AbortSignal.timeout(4500),
+    signal: AbortSignal.timeout(2500),
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadHunter/1.0)' },
   });
   if (response.status >= 300 && response.status < 400 && response.headers.get('location') && redirectsLeft > 0) {

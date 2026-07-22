@@ -23,6 +23,7 @@ interface MapLead {
 
 type PresenceFilter = 'all' | 'with' | 'without';
 type MapsProvider = 'google' | 'yandex';
+const targetOptions = [1, 3, 5, 10, 30, 50, 100] as const;
 
 interface ParserProgress {
   current: number;
@@ -49,6 +50,12 @@ const providerConfig = {
 
 function csvCell(value: string | boolean) {
   return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function companyWord(count: number) {
+  if (count === 1) return 'подходящую компанию';
+  if (count > 1 && count < 5) return 'подходящие компании';
+  return 'подходящих компаний';
 }
 
 function downloadCsv(leads: MapLead[], provider: MapsProvider) {
@@ -80,20 +87,23 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const config = providerConfig[provider];
   const api = `http://${window.location.hostname}:3001/api/${config.endpoint}`;
   const [query, setQuery] = useState(() => localStorage.getItem(`${config.storage}_query`) || '');
-  const [targetCount, setTargetCount] = useState(() => Number(localStorage.getItem(`${config.storage}_target`)) || 30);
+  const [targetCount, setTargetCount] = useState(() => {
+    const savedTarget = Number(localStorage.getItem(`${config.storage}_target_v2`));
+    return targetOptions.includes(savedTarget as typeof targetOptions[number]) ? savedTarget : 5;
+  });
   const [websiteFilter, setWebsiteFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_website`) as PresenceFilter) || 'all');
   const [phoneFilter, setPhoneFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_phone`) as PresenceFilter) || 'all');
   const [socialFilter, setSocialFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_socials`) as PresenceFilter) || 'all');
   const [leads, setLeads] = useState<MapLead[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState<ParserProgress>({ current: 0, total: 0, matched: 0, checked: 0, target: 30 });
+  const [progress, setProgress] = useState<ParserProgress>({ current: 0, total: 0, matched: 0, checked: 0, target: targetCount });
   const [error, setError] = useState('');
   const [showLogs, setShowLogs] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(`${config.storage}_query`, query);
-    localStorage.setItem(`${config.storage}_target`, String(targetCount));
+    localStorage.setItem(`${config.storage}_target_v2`, String(targetCount));
     localStorage.setItem(`${config.storage}_website`, websiteFilter);
     localStorage.setItem(`${config.storage}_phone`, phoneFilter);
     localStorage.setItem(`${config.storage}_socials`, socialFilter);
@@ -205,7 +215,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
         <section className="maps-flow" aria-label="Как работает парсер">
           <div><b>01</b><span>Запрос</span><small>Москва натяжные потолки</small></div><i>→</i>
           <div><b>02</b><span>Условия</span><small>Например: без сайта, с телефоном</small></div><i>→</i>
-          <div><b>03</b><span>Цель</span><small>30 подходящих компаний</small></div>
+          <div><b>03</b><span>Цель</span><small>1, 3, 5 или больше компаний</small></div>
         </section>
 
         <section className="maps-workspace">
@@ -219,10 +229,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
               <div>
                 <label>Сколько подходящих компаний</label>
                 <select className="form-input" value={targetCount} onChange={(event) => setTargetCount(Number(event.target.value))} disabled={loading}>
-                  <option value={10}>10 компаний</option>
-                  <option value={30}>30 компаний</option>
-                  <option value={50}>50 компаний</option>
-                  <option value={100}>100 компаний</option>
+                  {targetOptions.map((value) => <option key={value} value={value}>{value} {value === 1 ? 'компания' : value < 5 ? 'компании' : 'компаний'}</option>)}
                 </select>
               </div>
               <div className="maps-server-filter-note"><b>Фильтры работают во время поиска</b><span>Неподходящие компании не попадают в результат.</span></div>
@@ -231,13 +238,13 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
             <div className="maps-filter-bar maps-filter-settings">
               <label>Сайт<select value={websiteFilter} onChange={(event) => setWebsiteFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть сайт</option><option value="without">Нет сайта</option></select></label>
               <label>Телефон<select value={phoneFilter} onChange={(event) => setPhoneFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть телефон</option><option value="without">Нет телефона</option></select></label>
-              <label>Соцсети<select value={socialFilter} onChange={(event) => setSocialFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть соцсети</option><option value="without">Нет соцсетей</option></select></label>
+              <label>Telegram / WhatsApp / Instagram<select value={socialFilter} onChange={(event) => setSocialFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть хотя бы одна</option><option value="without">Нет ни одной</option></select></label>
             </div>
 
-            {loading ? <button type="button" className="btn btn-secondary maps-start" onClick={stopParsing}>Остановить сбор</button> : <button className="btn btn-primary maps-start">Найти {targetCount} подходящих компаний</button>}
+            {loading ? <button type="button" className="btn btn-secondary maps-start" onClick={stopParsing}>Остановить сбор</button> : <button className="btn btn-primary maps-start">Найти {targetCount} {companyWord(targetCount)}</button>}
             {loading ? <div className="maps-progress"><span style={{ width: `${progressPercent}%` }} /><small>Подходит {progress.matched} из {progress.target} · проверено карточек: {progress.checked}</small></div> : null}
           </form>
-          <aside className="telegram-note maps-note"><b>Важно</b><p>Если выбрано «Нет сайта + Есть телефон + Есть соцсети», парсер будет проверять выдачу дальше, а не остановится на первых 30 карточках.</p><small>Если таких компаний в выдаче меньше цели, журнал покажет, сколько найдено и сколько карточек проверено.</small></aside>
+          <aside className="telegram-note maps-note"><b>Быстрый режим</b><p>Собираются только Telegram, WhatsApp и Instagram. Достаточно любой одной найденной соцсети.</p><small>Если ссылка уже есть в карточке компании, сайт дополнительно не проверяется.</small></aside>
         </section>
 
         <section className="telegram-results maps-results">

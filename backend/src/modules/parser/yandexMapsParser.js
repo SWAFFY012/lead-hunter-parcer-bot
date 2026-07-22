@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import { addExtra } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { io } from '../../server.js';
-import { collectSocialLinks, crawlWebsiteSocialLinks, mergeSocialLinks } from '../../utils/socialExtractor.js';
+import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
 import { hasActiveMapLeadFilters, matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
 
 const playwrightExtra = addExtra(chromium);
@@ -12,7 +12,8 @@ let parserRunning = false;
 let parserBrowser = null;
 let shouldStop = false;
 
-const socialNames = ['telegram', 'whatsapp', 'vkontakte', 'vk', 'instagram', 'facebook', 'youtube', 'ok', 'viber', 'tiktok'];
+const socialNames = ['telegram', 'whatsapp', 'instagram'];
+const allowedSocialUrl = /(?:t\.me|telegram\.me|wa\.me|whatsapp\.com|instagram\.com)/i;
 
 function sleep(min, max) {
   const delay = min + Math.random() * (max - min);
@@ -37,13 +38,24 @@ async function collectCardSocials(page) {
   for (const name of socialNames) {
     const button = page.getByRole('button', { name: new RegExp(`Соцсети, ${name}`, 'i') }).first();
     if (await button.count() === 0) continue;
-    await button.click({ timeout: 1500 }).catch(() => {});
-    await sleep(80, 180);
+
+    const embeddedUrls = await button.evaluate((element) => [
+      ...Array.from(element.attributes).map((attribute) => attribute.value),
+      element.textContent || '',
+    ]).catch(() => []);
+    urls.push(...embeddedUrls.filter((value) => allowedSocialUrl.test(value)));
+
+    const clicked = await button.click({ timeout: 1500 }).then(() => true).catch(() => false);
+    if (!clicked) continue;
+    await sleep(40, 90);
+    const interceptedUrls = await page.evaluate(() => window.__leadHunterOpenedUrls?.splice(0) || []);
+    urls.push(...interceptedUrls.filter((url) => allowedSocialUrl.test(url)));
+
     const found = await page.locator('a[href]')
       .evaluateAll((links) => links
         .map((link) => link.href)
-        .filter((href) => /(?:t\.me|telegram\.me|wa\.me|whatsapp\.com|vk\.com|instagram\.com|facebook\.com|youtube\.com|youtu\.be|ok\.ru|viber\.com|tiktok\.com|twitter\.com|x\.com)/i.test(href)));
-    urls.push(...found.filter((url) => !/(?:t\.me\/mapsyandex|vk\.com\/yandex\.maps)/i.test(url)));
+        .filter((href) => /(?:t\.me|telegram\.me|wa\.me|whatsapp\.com|instagram\.com)/i.test(href)));
+    urls.push(...found.filter((url) => !/t\.me\/mapsyandex/i.test(url)));
   }
   return collectSocialLinks(urls);
 }
@@ -95,6 +107,13 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
       viewport: { width: 1366, height: 850 },
       locale: 'ru-RU',
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    });
+    await context.addInitScript(() => {
+      window.__leadHunterOpenedUrls = [];
+      window.open = (url) => {
+        if (url) window.__leadHunterOpenedUrls.push(String(url));
+        return null;
+      };
     });
     const searchPage = await context.newPage();
     await searchPage.route('**/*', (route) => {
@@ -151,10 +170,10 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
           await detailsPage.waitForSelector('h1', { timeout: 12_000 });
           await sleep(500, 900);
           const card = await extractCard(detailsPage);
-          const socialLinks = mergeSocialLinks(
-            await collectCardSocials(detailsPage),
-            await crawlWebsiteSocialLinks(card.website)
-          );
+          const cardSocialLinks = await collectCardSocials(detailsPage);
+          const socialLinks = cardSocialLinks.length
+            ? cardSocialLinks
+            : await crawlWebsiteSocialLinks(card.website);
           const lead = {
             ...card,
             socialLinks,

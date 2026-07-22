@@ -5,7 +5,7 @@ import { getDb, hasDatabaseConfig } from '../../db/database.js';
 import { io } from '../../server.js';
 import { systemLog } from '../../utils/logger.js';
 import { getProfile, buildContextOptions, applyFingerprintScripts } from '../fingerprint/profileManager.js';
-import { collectSocialLinks, crawlWebsiteSocialLinks, mergeSocialLinks } from '../../utils/socialExtractor.js';
+import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
 import { hasActiveMapLeadFilters, matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
 
 const playwrightExtra = addExtra(chromium);
@@ -193,16 +193,16 @@ export async function startGoogleMapsParsing(options) {
 
           const socialUrls = Array.from(document.querySelectorAll('a[href]'))
             .map(a => a.href)
-            .filter(href => /(?:t\.me|telegram\.me|wa\.me|whatsapp\.com|vk\.com|instagram\.com|facebook\.com|youtube\.com|youtu\.be|ok\.ru|viber\.com|tiktok\.com|twitter\.com|x\.com)/i.test(href));
+            .filter(href => /(?:t\.me|telegram\.me|wa\.me|whatsapp\.com|instagram\.com)/i.test(href));
           
           return { name, title, phone, website, rating, address, isClaimed, socialUrls };
         });
         
         const { name, title, phone, website, rating, address, isClaimed, socialUrls } = extractedData;
-        const socialLinks = mergeSocialLinks(
-          collectSocialLinks(socialUrls),
-          await crawlWebsiteSocialLinks(website)
-        );
+        const cardSocialLinks = collectSocialLinks(socialUrls);
+        const socialLinks = cardSocialLinks.length
+          ? cardSocialLinks
+          : await crawlWebsiteSocialLinks(website);
         
         const rawPhone = phone || '';
         const cleanPhone = rawPhone.replace(/\D/g, '');
