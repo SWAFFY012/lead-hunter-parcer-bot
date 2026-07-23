@@ -5,7 +5,15 @@ import { io } from '../../server.js';
 import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
 import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
 import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
+import {
+  finishMapParserRun,
+  getMapParserRun,
+  recordMapParserLead,
+  recordMapParserProgress,
+  startMapParserRun,
+} from '../../utils/mapParserRunStore.js';
 
+const PLATFORM = 'yandex_maps';
 const playwrightExtra = addExtra(chromium);
 playwrightExtra.use(StealthPlugin());
 
@@ -118,6 +126,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
   const filters = normalizeMapLeadFilters(rawFilters);
   parserRunning = true;
   shouldStop = false;
+  startMapParserRun(PLATFORM, { query, targetCount, filters });
   io.emit('parser:started', { platform: 'yandex_maps', targetCount, filters });
   io.emit('parser:status', { isRunning: true, platform: 'yandex_maps' });
 
@@ -207,6 +216,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
           candidatesChecked++;
           if (matchesMapLeadFilters(lead, filters)) {
             matchedCount++;
+            recordMapParserLead(PLATFORM, lead);
             io.emit('parser:lead', { lead });
             io.emit('parser:log', { platform: 'yandex_maps', message: `[${matchedCount}/${targetCount}] Подходит: ${card.name}`, type: 'success' });
           }
@@ -215,7 +225,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
         }
       }
 
-      io.emit('parser:progress', {
+      const progress = {
         platform: 'yandex_maps',
         currentPage: pageIndex + 1,
         totalPages: 0,
@@ -223,7 +233,9 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
         candidatesChecked,
         duplicatesSkipped,
         targetCount,
-      });
+      };
+      recordMapParserProgress(PLATFORM, progress);
+      io.emit('parser:progress', progress);
       io.emit('parser:log', {
         platform: 'yandex_maps',
         message: `Страница ${pageIndex + 1}: проверено новых ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}, подходит ${matchedCount}.`,
@@ -251,13 +263,14 @@ export function stopYandexMapsParsing() {
 }
 
 export function getYandexMapsStatus() {
-  return { isRunning: parserRunning };
+  return getMapParserRun(PLATFORM, parserRunning);
 }
 
 async function cleanup() {
   if (parserBrowser) await parserBrowser.close().catch(() => {});
   parserBrowser = null;
   parserRunning = false;
+  finishMapParserRun(PLATFORM);
   io.emit('parser:status', { isRunning: false, platform: 'yandex_maps' });
   io.emit('parser:done', { platform: 'yandex_maps' });
   io.emit('parser:log', { platform: 'yandex_maps', message: 'Парсер Яндекс Карт завершён.', type: 'info' });

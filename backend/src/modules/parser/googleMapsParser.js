@@ -8,7 +8,15 @@ import { getProfile, buildContextOptions, applyFingerprintScripts } from '../fin
 import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
 import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
 import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
+import {
+  finishMapParserRun,
+  getMapParserRun,
+  recordMapParserLead,
+  recordMapParserProgress,
+  startMapParserRun,
+} from '../../utils/mapParserRunStore.js';
 
+const PLATFORM = 'google_maps';
 const playwrightExtra = addExtra(chromium);
 playwrightExtra.use(StealthPlugin());
 
@@ -22,7 +30,7 @@ function sleep(min, max) {
 }
 
 export async function startGoogleMapsParsing(options) {
-  const { url, targetCount = 30, campaignId = null, profileId = null, taskId = null } = options;
+  const { url, query = url, targetCount = 30, campaignId = null, profileId = null, taskId = null } = options;
   const filters = normalizeMapLeadFilters(options.filters);
   if (parserRunning) {
     io.emit('parser:log', { platform: 'google_maps', message: 'Парсер Google Maps уже запущен', type: 'warn' });
@@ -31,6 +39,7 @@ export async function startGoogleMapsParsing(options) {
 
   parserRunning = true;
   shouldStop = false;
+  startMapParserRun(PLATFORM, { query, targetCount, filters });
   io.emit('parser:started', { platform: 'google_maps', targetCount, filters });
   io.emit('parser:status', { isRunning: true, platform: 'google_maps' });
   systemLog('parser', 'info', `Starting Google Maps parser for URL: ${url}`);
@@ -232,6 +241,7 @@ export async function startGoogleMapsParsing(options) {
         const isMatch = matchesMapLeadFilters(lead, filters);
         if (isMatch) {
           matchedCount++;
+          recordMapParserLead(PLATFORM, lead);
           io.emit('parser:lead', { lead });
           io.emit('parser:log', { platform: 'google_maps', message: `[${matchedCount}/${targetCount}] Подходит: ${name}`, type: 'success' });
         }
@@ -268,7 +278,7 @@ export async function startGoogleMapsParsing(options) {
           io.emit('parser:log', { platform: 'google_maps', message: `Не удалось прочитать карточку: ${err.message}`, type: 'error' });
         }
 
-        io.emit('parser:progress', {
+        const progress = {
           platform: 'google_maps',
           currentPage: scrollIndex + 1,
           totalPages: 0,
@@ -276,7 +286,9 @@ export async function startGoogleMapsParsing(options) {
           candidatesChecked,
           duplicatesSkipped,
           targetCount,
-        });
+        };
+        recordMapParserProgress(PLATFORM, progress);
+        io.emit('parser:progress', progress);
       }
 
       if (matchedCount >= targetCount || consecutiveEmptyScrolls >= 3) break;
@@ -313,7 +325,7 @@ export function stopParsing() {
 }
 
 export function getParserStatus() {
-  return { isRunning: parserRunning };
+  return getMapParserRun(PLATFORM, parserRunning);
 }
 
 async function cleanup() {
@@ -324,6 +336,7 @@ async function cleanup() {
     parserBrowser = null;
   }
   parserRunning = false;
+  finishMapParserRun(PLATFORM);
   io.emit('parser:status', { isRunning: false, platform: 'google_maps' });
   io.emit('parser:done', { platform: 'google_maps' });
   io.emit('parser:log', { platform: 'google_maps', message: 'Парсер Google Карт завершён.', type: 'info' });

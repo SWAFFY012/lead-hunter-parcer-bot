@@ -28,7 +28,7 @@ router.post('/start', (req, res) => {
   const url = /^https?:\/\//i.test(query)
     ? query
     : `https://www.google.com/maps/search/${encodeURIComponent(query)}?hl=ru`;
-  void startGoogleMapsParsing({ url, targetCount, filters });
+  void startGoogleMapsParsing({ query, url, targetCount, filters });
   return res.json({ ok: true, query, url, targetCount, filters });
 });
 

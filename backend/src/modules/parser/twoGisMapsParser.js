@@ -2,6 +2,13 @@ import { io } from '../../server.js';
 import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
 import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
 import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
+import {
+  finishMapParserRun,
+  getMapParserRun,
+  recordMapParserLead,
+  recordMapParserProgress,
+  startMapParserRun,
+} from '../../utils/mapParserRunStore.js';
 
 const PLATFORM = 'two_gis_maps';
 const REQUEST_HEADERS = {
@@ -72,6 +79,8 @@ let candidatesChecked = 0;
 const activeControllers = new Set();
 
 function emitParserEvent(event, payload = {}) {
+  if (event === 'parser:lead' && payload.lead) recordMapParserLead(PLATFORM, payload.lead);
+  if (event === 'parser:progress') recordMapParserProgress(PLATFORM, payload);
   io.emit(event, { platform: PLATFORM, ...payload });
 }
 
@@ -177,6 +186,36 @@ export function extractTwoGisFirmLinks(html) {
   return [...links];
 }
 
+function extractSearchCenter(html) {
+  const match = String(html || '').match(/center=([-.\d]+)%2C([-.\d]+)/i);
+  if (!match) return null;
+  const longitude = Number(match[1]);
+  const latitude = Number(match[2]);
+  return Number.isFinite(longitude) && Number.isFinite(latitude)
+    ? { longitude, latitude }
+    : null;
+}
+
+function buildViewportCenters(center) {
+  if (!center) return [];
+  const centers = [];
+  const longitudeStep = 0.12;
+  const latitudeStep = 0.09;
+
+  for (let radius = 1; radius <= 4; radius++) {
+    for (let y = -radius; y <= radius; y++) {
+      for (let x = -radius; x <= radius; x++) {
+        if (Math.abs(x) !== radius && Math.abs(y) !== radius) continue;
+        centers.push({
+          longitude: center.longitude + x * longitudeStep,
+          latitude: center.latitude + y * latitudeStep,
+        });
+      }
+    }
+  }
+  return centers;
+}
+
 function extractWebsite(hrefs) {
   for (const rawHref of hrefs) {
     const href = decodeHtml(rawHref);
@@ -239,6 +278,7 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
   activeQuery = query;
   matchedCount = 0;
   candidatesChecked = 0;
+  startMapParserRun(PLATFORM, { query, targetCount, filters });
   emitParserEvent('parser:started', { targetCount, filters, query });
   emitParserEvent('parser:status', { isRunning: true, targetCount, query });
 
@@ -248,11 +288,17 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
     const seenFirms = new Set();
     let duplicatesSkipped = 0;
     let consecutiveEmptyPages = 0;
+    let searchHtml = await fetchHtml(searchUrl);
+    const viewportCenters = buildViewportCenters(extractSearchCenter(searchHtml));
 
     for (let pageNumber = 1; matchedCount < targetCount && !shouldStop; pageNumber++) {
-      const pageUrl = new URL(searchUrl);
-      if (pageNumber > 1) pageUrl.searchParams.set('page', String(pageNumber));
-      const searchHtml = await fetchHtml(pageUrl.href);
+      if (pageNumber > 1) {
+        const viewport = viewportCenters[pageNumber - 2];
+        if (!viewport) break;
+        const pageUrl = new URL(searchUrl);
+        pageUrl.searchParams.set('m', `${viewport.longitude},${viewport.latitude}/13`);
+        searchHtml = await fetchHtml(pageUrl.href);
+      }
       const pageLinks = extractTwoGisFirmLinks(searchHtml);
       const newLinks = pageLinks.filter((sourceUrl) => {
         if (seenFirms.has(sourceUrl)) return false;
@@ -304,7 +350,7 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
       emitParserLog(
         `Страница ${pageNumber}: проверено новых ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}, подходит ${matchedCount}.`
       );
-      if (consecutiveEmptyPages >= 2 || pageLinks.length === 0) break;
+      if (consecutiveEmptyPages >= 8) break;
     }
 
     emitParserLog(
@@ -321,6 +367,7 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
   } finally {
     parserRunning = false;
     activeQuery = '';
+    finishMapParserRun(PLATFORM);
     for (const controller of activeControllers) controller.abort();
     activeControllers.clear();
     emitParserEvent('parser:status', { isRunning: false });
@@ -338,10 +385,5 @@ export function stopTwoGisMapsParsing() {
 }
 
 export function getTwoGisMapsStatus() {
-  return {
-    isRunning: parserRunning,
-    query: activeQuery,
-    matchedCount,
-    candidatesChecked,
-  };
+  return getMapParserRun(PLATFORM, parserRunning);
 }

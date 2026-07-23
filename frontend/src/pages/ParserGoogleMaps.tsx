@@ -41,6 +41,13 @@ interface ParserProgress {
   target: number;
 }
 
+interface ParserStatusResponse {
+  isRunning?: boolean;
+  leads?: MapLead[];
+  progress?: Partial<ParserProgress>;
+  targetCount?: number;
+}
+
 const providerConfig = {
   google: {
     name: 'Google Карты',
@@ -184,7 +191,19 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
     socket.on('parser:done', onDone);
     fetch(`${api}/status`)
       .then((response) => response.json())
-      .then((data: { isRunning?: boolean }) => setLoading(Boolean(data.isRunning)))
+      .then((data: ParserStatusResponse) => {
+        setLoading(Boolean(data.isRunning));
+        setLeads(data.leads || []);
+        if (data.progress) {
+          setProgress({
+            current: data.progress.current ?? 0,
+            total: data.progress.total ?? 0,
+            matched: data.progress.matched ?? data.leads?.length ?? 0,
+            checked: data.progress.checked ?? 0,
+            target: data.progress.target ?? data.targetCount ?? targetCount,
+          });
+        }
+      })
       .catch(() => undefined);
 
     return () => {
