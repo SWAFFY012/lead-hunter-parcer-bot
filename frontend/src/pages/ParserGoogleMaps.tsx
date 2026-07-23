@@ -26,6 +26,13 @@ type PresenceFilter = 'all' | 'with' | 'without';
 type MapsProvider = 'google' | 'yandex' | 'twoGis';
 const targetOptions = [1, 3, 5, 10, 30, 50, 100] as const;
 
+function getParserStartError(requestError: unknown) {
+  if (requestError instanceof TypeError) {
+    return 'Сервер парсеров недоступен. Запустите файл start-host.cmd в папке проекта и повторите попытку.';
+  }
+  return requestError instanceof Error ? requestError.message : 'Не удалось запустить парсер.';
+}
+
 interface ParserProgress {
   current: number;
   total: number;
@@ -214,7 +221,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
       if (!response.ok) throw new Error(data.error || 'Не удалось запустить парсер.');
     } catch (requestError) {
       setLoading(false);
-      setError(requestError instanceof Error ? requestError.message : 'Не удалось запустить парсер.');
+      setError(getParserStartError(requestError));
     }
   };
 
