@@ -1,0 +1,347 @@
+import { io } from '../../server.js';
+import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
+import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
+import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
+
+const PLATFORM = 'two_gis_maps';
+const REQUEST_HEADERS = {
+  // 2GIS serves its complete server-rendered directory to this compatibility UA.
+  'User-Agent': 'Mozilla/5.0',
+  'Accept-Language': 'ru-RU,ru;q=0.9',
+  Accept: 'text/html,application/xhtml+xml',
+};
+
+const cityAliases = [
+  ['санкт-петербург', 'spb'],
+  ['санкт петербург', 'spb'],
+  ['нижний новгород', 'n_novgorod'],
+  ['ростов-на-дону', 'rostov'],
+  ['ростов на дону', 'rostov'],
+  ['набережные челны', 'nabchelny'],
+  ['москва', 'moscow'],
+  ['новосибирск', 'novosibirsk'],
+  ['екатеринбург', 'ekaterinburg'],
+  ['казань', 'kazan'],
+  ['челябинск', 'chelyabinsk'],
+  ['самара', 'samara'],
+  ['омск', 'omsk'],
+  ['уфа', 'ufa'],
+  ['красноярск', 'krasnoyarsk'],
+  ['воронеж', 'voronezh'],
+  ['пермь', 'perm'],
+  ['волгоград', 'volgograd'],
+  ['краснодар', 'krasnodar'],
+  ['саратов', 'saratov'],
+  ['тюмень', 'tyumen'],
+  ['тольятти', 'togliatti'],
+  ['ижевск', 'izhevsk'],
+  ['барнаул', 'barnaul'],
+  ['ульяновск', 'ulyanovsk'],
+  ['иркутск', 'irkutsk'],
+  ['хабаровск', 'khabarovsk'],
+  ['махачкала', 'mahachkala'],
+  ['владивосток', 'vladivostok'],
+  ['ярославль', 'yaroslavl'],
+  ['оренбург', 'orenburg'],
+  ['кемерово', 'kemerovo'],
+  ['новокузнецк', 'novokuznetsk'],
+  ['рязань', 'ryazan'],
+  ['астрахань', 'astrakhan'],
+  ['пенза', 'penza'],
+  ['липецк', 'lipetsk'],
+  ['киров', 'kirov'],
+  ['чебоксары', 'cheboksary'],
+  ['калининград', 'kaliningrad'],
+  ['тула', 'tula'],
+  ['курск', 'kursk'],
+  ['ставрополь', 'stavropol'],
+  ['сочи', 'sochi'],
+  ['белгород', 'belgorod'],
+  ['архангельск', 'arkhangelsk'],
+  ['владимир', 'vladimir'],
+  ['смоленск', 'smolensk'],
+  ['сургут', 'surgut'],
+  ['томск', 'tomsk'],
+];
+
+let parserRunning = false;
+let shouldStop = false;
+let activeQuery = '';
+let matchedCount = 0;
+let candidatesChecked = 0;
+const activeControllers = new Set();
+
+function emitParserEvent(event, payload = {}) {
+  io.emit(event, { platform: PLATFORM, ...payload });
+}
+
+function emitParserLog(message, type = 'info') {
+  emitParserEvent('parser:log', { message, type });
+}
+
+function normalizeText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function decodeHtml(value) {
+  return String(value || '')
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
+function cleanHtmlText(value) {
+  return decodeHtml(String(value || '').replace(/<[^>]*>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function metaContent(html, name) {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = html.match(new RegExp(`<meta[^>]+(?:property|name)="${escapedName}"[^>]+content="([^"]*)"`, 'i'));
+  return decodeHtml(match?.[1] || '');
+}
+
+function transliterate(value) {
+  const letters = {
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y',
+    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u',
+    ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '',
+    э: 'e', ю: 'yu', я: 'ya',
+  };
+  return normalizeText(value)
+    .split('')
+    .map((letter) => letters[letter] ?? letter)
+    .join('')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+export function buildTwoGisSearchUrl(rawQuery) {
+  const query = String(rawQuery || '').trim();
+  if (/^https?:\/\//i.test(query)) {
+    const url = new URL(query);
+    if (!/(^|\.)2gis\.ru$/i.test(url.hostname) || !url.pathname.includes('/search/')) {
+      throw new Error('Вставьте ссылку именно на результаты поиска 2ГИС.');
+    }
+    return url.href;
+  }
+
+  const normalized = normalizeText(query);
+  const knownCity = cityAliases.find(([city]) => normalized === city || normalized.startsWith(`${city} `));
+  const firstWord = normalized.split(' ')[0];
+  const cityAlias = knownCity?.[1] || transliterate(firstWord);
+  if (!cityAlias) {
+    throw new Error('Не удалось определить город. Введите город первым словом или вставьте ссылку поиска 2ГИС.');
+  }
+  return `https://2gis.ru/${cityAlias}/search/${encodeURIComponent(query)}`;
+}
+
+async function fetchHtml(url) {
+  if (shouldStop) throw new Error('PARSER_STOPPED');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25_000);
+  activeControllers.add(controller);
+  try {
+    const response = await fetch(url, {
+      headers: REQUEST_HEADERS,
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (response.status === 403) {
+      throw new Error('2ГИС временно ограничил запросы. Подождите минуту и запустите снова.');
+    }
+    if (!response.ok) throw new Error(`2ГИС вернул HTTP ${response.status}.`);
+    return await response.text();
+  } finally {
+    clearTimeout(timeout);
+    activeControllers.delete(controller);
+  }
+}
+
+export function extractTwoGisFirmLinks(html) {
+  const links = new Set();
+  for (const match of String(html || '').matchAll(/href="(\/[^"]+\/firm\/\d+[^"]*)"/gi)) {
+    const path = decodeHtml(match[1]).match(/^\/([^/]+)\/firm\/(\d+)/);
+    if (path) links.add(`https://2gis.ru/${path[1]}/firm/${path[2]}`);
+  }
+  return [...links];
+}
+
+function extractWebsite(hrefs) {
+  for (const rawHref of hrefs) {
+    const href = decodeHtml(rawHref);
+    if (/^(?:tel:|https?:\/\/(?:t\.me|telegram\.me|wa\.me|whatsapp\.com|(?:www\.)?instagram\.com))/i.test(href)) continue;
+
+    let candidate = href;
+    const redirectedTargetIndex = href.lastIndexOf('?http');
+    if (/^https?:\/\/link\.2gis\.ru/i.test(href) && redirectedTargetIndex >= 0) {
+      candidate = href.slice(redirectedTargetIndex + 1);
+    }
+
+    try {
+      const url = new URL(candidate);
+      if (!['http:', 'https:'].includes(url.protocol)) continue;
+      if (/(^|\.)2gis\.(?:ru|com)$/i.test(url.hostname) || /(^|\.)max\.ru$/i.test(url.hostname)) continue;
+      return url.href;
+    } catch {
+      // Malformed advertising and service links are ignored.
+    }
+  }
+  return '';
+}
+
+export function parseTwoGisCompanyHtml(html, sourceUrl) {
+  const headingIndex = html.indexOf('<h1');
+  const relatedIndex = html.indexOf('Похожие организации', headingIndex);
+  const companyHtml = headingIndex >= 0
+    ? html.slice(headingIndex, relatedIndex > headingIndex ? relatedIndex : html.length)
+    : html;
+  const headingMatch = companyHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  const categoryMatch = companyHtml.match(/<\/h1>\s*<div[^>]*>\s*<span[^>]*>([\s\S]*?)<\/span>/i);
+  const addressMatch = companyHtml.match(/<a[^>]+href="\/[^"]+\/geo\/[^"]+"[^>]*>([\s\S]*?)<\/a>/i);
+  const hrefs = [...companyHtml.matchAll(/href="([^"]+)"/gi)].map((match) => decodeHtml(match[1]));
+  const phoneHref = hrefs.find((href) => href.startsWith('tel:')) || '';
+  const socialLinks = collectSocialLinks(hrefs);
+  const ratingDescription = metaContent(html, 'og:description');
+
+  return {
+    name: cleanHtmlText(headingMatch?.[1]),
+    title: cleanHtmlText(categoryMatch?.[1]),
+    phone: phoneHref.replace(/^tel:/i, ''),
+    website: extractWebsite(hrefs),
+    rating: (ratingDescription.match(/Оценка\s*([\d.,]+)/i)?.[1] || '').replace(/[.,]+$/, ''),
+    address: cleanHtmlText(addressMatch?.[1]),
+    description: metaContent(html, 'description'),
+    socialLinks,
+    sourceUrl,
+    isClaimed: true,
+    platform: PLATFORM,
+  };
+}
+
+export async function startTwoGisMapsParsing({ query, targetCount = 30, filters: rawFilters = {} }) {
+  if (parserRunning) return { success: false, error: 'Парсер 2ГИС уже запущен.' };
+
+  const filters = normalizeMapLeadFilters(rawFilters);
+  const searchUrl = buildTwoGisSearchUrl(query);
+  parserRunning = true;
+  shouldStop = false;
+  activeQuery = query;
+  matchedCount = 0;
+  candidatesChecked = 0;
+  emitParserEvent('parser:started', { targetCount, filters, query });
+  emitParserEvent('parser:status', { isRunning: true, targetCount, query });
+
+  try {
+    emitParserLog(`Открываем 2ГИС: ${query}`);
+    emitParserLog(`Ищем ${targetCount} компаний, подходящих под выбранные фильтры.`);
+    const seenFirms = new Set();
+    let duplicatesSkipped = 0;
+    let consecutiveEmptyPages = 0;
+
+    for (let pageNumber = 1; matchedCount < targetCount && !shouldStop; pageNumber++) {
+      const pageUrl = new URL(searchUrl);
+      if (pageNumber > 1) pageUrl.searchParams.set('page', String(pageNumber));
+      const searchHtml = await fetchHtml(pageUrl.href);
+      const pageLinks = extractTwoGisFirmLinks(searchHtml);
+      const newLinks = pageLinks.filter((sourceUrl) => {
+        if (seenFirms.has(sourceUrl)) return false;
+        seenFirms.add(sourceUrl);
+        return true;
+      });
+      consecutiveEmptyPages = newLinks.length ? 0 : consecutiveEmptyPages + 1;
+
+      for (const sourceUrl of newLinks) {
+        if (shouldStop || matchedCount >= targetCount) break;
+        const cachedLead = await getCachedMapLead(PLATFORM, sourceUrl);
+        if (cachedLead) {
+          duplicatesSkipped++;
+          continue;
+        }
+
+        try {
+          const companyHtml = await fetchHtml(sourceUrl);
+          const card = parseTwoGisCompanyHtml(companyHtml, sourceUrl);
+          const socialLinks = card.socialLinks.length
+            ? card.socialLinks
+            : await crawlWebsiteSocialLinks(card.website);
+          const lead = { ...card, socialLinks };
+          await rememberMapLead(lead);
+          candidatesChecked++;
+
+          if (matchesMapLeadFilters(lead, filters)) {
+            matchedCount++;
+            emitParserEvent('parser:lead', { lead });
+            emitParserLog(`[${matchedCount}/${targetCount}] Подходит: ${lead.name || 'Компания без названия'}`, 'success');
+          }
+        } catch (error) {
+          if (!shouldStop) {
+            const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+            emitParserLog(`Не удалось прочитать карточку: ${message}`, 'error');
+          }
+        }
+
+        emitParserEvent('parser:progress', {
+          currentPage: pageNumber,
+          totalPages: 0,
+          matchedCount,
+          candidatesChecked,
+          duplicatesSkipped,
+          targetCount,
+        });
+      }
+
+      emitParserLog(
+        `Страница ${pageNumber}: проверено новых ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}, подходит ${matchedCount}.`
+      );
+      if (consecutiveEmptyPages >= 2 || pageLinks.length === 0) break;
+    }
+
+    emitParserLog(
+      matchedCount >= targetCount
+        ? `Готово: найдено ${matchedCount} новых подходящих компаний, пропущено из памяти ${duplicatesSkipped}.`
+        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount}, проверено ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}.`,
+      matchedCount >= targetCount ? 'success' : 'warn'
+    );
+  } catch (error) {
+    if (!shouldStop) {
+      const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      emitParserLog(`Ошибка 2ГИС: ${message}`, 'error');
+    }
+  } finally {
+    parserRunning = false;
+    activeQuery = '';
+    for (const controller of activeControllers) controller.abort();
+    activeControllers.clear();
+    emitParserEvent('parser:status', { isRunning: false });
+    emitParserEvent('parser:done');
+    emitParserLog(shouldStop ? 'Парсер 2ГИС остановлен.' : 'Парсер 2ГИС завершён.');
+  }
+
+  return { success: true };
+}
+
+export function stopTwoGisMapsParsing() {
+  shouldStop = true;
+  for (const controller of activeControllers) controller.abort();
+  emitParserLog('Останавливаем парсер 2ГИС…', 'warn');
+}
+
+export function getTwoGisMapsStatus() {
+  return {
+    isRunning: parserRunning,
+    query: activeQuery,
+    matchedCount,
+    candidatesChecked,
+  };
+}

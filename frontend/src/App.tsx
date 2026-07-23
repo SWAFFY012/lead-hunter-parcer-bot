@@ -9,6 +9,7 @@ import { ParserHub } from './pages/ParserHub';
 import { ParserTelegram } from './pages/ParserTelegram';
 import { ParserGoogleMaps } from './pages/ParserGoogleMaps';
 import { ParserYandexMaps } from './pages/ParserYandexMaps';
+import { Parser2Gis } from './pages/Parser2Gis';
 import { ManualBases } from './pages/ManualBases';
 import { Leads } from './pages/Leads';
 import { Pipeline } from './pages/Pipeline';
@@ -36,6 +37,7 @@ export default function App() {
               <Route path="/parser/telegram" element={<ParserTelegram />} />
               <Route path="/parser/google-maps" element={<ParserGoogleMaps />} />
               <Route path="/parser/yandex-maps" element={<ParserYandexMaps />} />
+              <Route path="/parser/2gis-maps" element={<Parser2Gis />} />
               <Route path="/manual-bases" element={<ManualBases />} />
               <Route path="/leads" element={<Leads />} />
               <Route path="/pipeline" element={<Pipeline />} />

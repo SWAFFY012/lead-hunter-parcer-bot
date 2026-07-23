@@ -18,12 +18,12 @@ interface MapLead {
   socialLinks?: SocialLink[];
   sourceUrl: string;
   isClaimed: boolean;
-  platform: 'google_maps' | 'yandex_maps';
+  platform: 'google_maps' | 'yandex_maps' | 'two_gis_maps';
   savedAt?: string;
 }
 
 type PresenceFilter = 'all' | 'with' | 'without';
-type MapsProvider = 'google' | 'yandex';
+type MapsProvider = 'google' | 'yandex' | 'twoGis';
 const targetOptions = [1, 3, 5, 10, 30, 50, 100] as const;
 
 interface ParserProgress {
@@ -46,6 +46,12 @@ const providerConfig = {
     platform: 'yandex_maps' as const,
     endpoint: 'yandex-maps',
     storage: 'ym',
+  },
+  twoGis: {
+    name: '2ГИС',
+    platform: 'two_gis_maps' as const,
+    endpoint: '2gis-maps',
+    storage: '2gis',
   },
 };
 
@@ -155,7 +161,8 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
       if (data.lead.platform !== config.platform) return;
       setLeads((current) => current.some((lead) => lead.sourceUrl === data.lead.sourceUrl) ? current : [data.lead, ...current]);
     };
-    const onLog = (data: { message: string }) => {
+    const onLog = (data: { platform?: string; message: string }) => {
+      if (data.platform !== config.platform) return;
       setLogs((current) => [`[${new Date().toLocaleTimeString('ru-RU')}] ${data.message}`, ...current].slice(0, 300));
     };
     const onDone = (data?: { platform?: string }) => {
@@ -190,6 +197,10 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
       return;
     }
     try {
+      setLoading(true);
+      setLeads([]);
+      setLogs([`Отправляем задачу в ${config.name}…`]);
+      setProgress({ current: 0, total: 0, matched: 0, checked: 0, target: targetCount });
       const response = await fetch(`${api}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -254,7 +265,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const unsavedLeads = leads.filter((lead) => !savedSourceUrls.has(lead.sourceUrl));
 
   return (
-    <div className={`maps-page ${provider}`}>
+    <div className={`maps-page ${provider === 'twoGis' ? 'twogis' : provider}`}>
       <header className="telegram-header maps-header">
         <button className="telegram-back" onClick={() => navigate('/parser')} aria-label="Назад">←</button>
         <div>
@@ -332,7 +343,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
           <div className="maps-result-actions"><span>Можно позвонить или написать позже — список хранится на этом компьютере.</span><button className="btn btn-secondary" onClick={() => downloadCsv(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать сохранённые</button></div>
           <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Соцсети</th><th>Сайт</th><th>Сохранено</th><th></th></tr></thead><tbody>
             {savedLeads.map((lead) => <tr key={`${lead.platform}:${lead.sourceUrl}`}>
-              <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.platform === 'yandex_maps' ? 'Яндекс Карты' : 'Google Карты'} · {lead.address || 'Адрес не указан'}</small></td>
+              <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.platform === 'yandex_maps' ? 'Яндекс Карты' : lead.platform === 'two_gis_maps' ? '2ГИС' : 'Google Карты'} · {lead.address || 'Адрес не указан'}</small></td>
               <td>{lead.phone ? <a href={`tel:${lead.phone}`}>{lead.phone}</a> : '—'}</td>
               <td><div className="maps-socials">{lead.socialLinks?.length ? lead.socialLinks.map((social) => <a key={social.url} href={social.url} target="_blank" rel="noreferrer">{social.platform}</a>) : <span className="maps-missing">Не найдены</span>}</div></td>
               <td>{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Открыть сайт</a> : <span className="maps-missing">Нет сайта</span>}</td>

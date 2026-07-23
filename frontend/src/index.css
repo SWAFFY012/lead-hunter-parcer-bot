@@ -103,7 +103,14 @@ body {
 }
 .parser-hub-intro h2 { margin-top: 10px; font-size: clamp(28px, 4vw, 44px); line-height: 1.06; letter-spacing: -.035em; }
 .parser-hub-intro p { margin-top: 12px; color: var(--color-text-secondary); font-size: 16px; }
-.parser-source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; max-width: 1120px; }
+.parser-source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(245px, 1fr)); gap: 20px; max-width: 1480px; }
+.parser-parallel-panel { max-width: 1480px; margin-bottom: 14px; padding: 22px 24px; display: flex; align-items: center; justify-content: space-between; gap: 30px; border: 1px solid #b9d8ce; border-left: 5px solid #0f766e; background: linear-gradient(115deg, #f0fdfa 0%, #fff 72%); box-shadow: 0 12px 34px rgba(15, 118, 110, .08); }
+.parser-parallel-panel > div { max-width: 760px; display: grid; gap: 6px; }
+.parser-parallel-panel strong { color: #0f172a; font-size: 22px; letter-spacing: -.02em; }
+.parser-parallel-panel p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.55; }
+.parser-parallel-links { display: grid; grid-template-columns: repeat(3, minmax(90px, 1fr)); gap: 8px; }
+.parser-parallel-links a { min-height: 42px; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #99d5c2; border-radius: 6px; background: #fff; color: #0f766e; font-size: 12px; font-weight: 800; white-space: nowrap; transition: .2s ease; }
+.parser-parallel-links a:hover { border-color: #0f766e; background: #0f766e; color: #fff; transform: translateY(-2px); }
 .parser-source-card {
   min-height: 330px;
   padding: 28px;
@@ -122,12 +129,19 @@ body {
 .parser-source-card.telegram:hover { border-color: #229ed9; }
 .parser-source-card.maps:hover { border-color: #4285f4; }
 .parser-source-card.yandex:hover { border-color: #ef3124; }
+.parser-source-card.twogis:hover { border-color: #20a776; }
 .parser-source-number { font-family: var(--font-family-mono); font-size: 12px; color: #94a3b8; }
+.parser-source-state { justify-self: end; display: inline-flex; align-items: center; gap: 6px; color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.parser-source-state i { width: 7px; height: 7px; border-radius: 50%; background: #cbd5e1; }
+.parser-source-state.active { color: #047857; }
+.parser-source-state.active i { background: #10b981; box-shadow: 0 0 0 4px rgba(16,185,129,.12); animation: parser-status-pulse 1.6s ease-in-out infinite; }
+@keyframes parser-status-pulse { 50% { box-shadow: 0 0 0 7px rgba(16,185,129,0); } }
 .parser-source-icon { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 50%; }
 .parser-source-icon svg { width: 30px; height: 30px; fill: currentColor; }
 .telegram .parser-source-icon { color: #fff; background: #229ed9; }
 .maps .parser-source-icon { color: #4285f4; background: #eff6ff; }
 .yandex .parser-source-icon { color: #ef3124; background: #fff1f0; }
+.twogis .parser-source-icon { color: #fff; background: #20a776; }
 .parser-source-copy { grid-column: 1 / -1; align-self: end; display: flex; flex-direction: column; gap: 10px; max-width: 480px; }
 .parser-source-copy strong { font-size: 27px; letter-spacing: -.025em; }
 .parser-source-copy > span { color: var(--color-text-secondary); line-height: 1.65; }
@@ -135,6 +149,7 @@ body {
 .telegram .parser-source-link { color: #168bc2; }
 .maps .parser-source-link { color: #2563eb; }
 .yandex .parser-source-link { color: #d92118; }
+.twogis .parser-source-link { color: #0f8b64; }
 .parser-source-link b { margin-left: 5px; transition: margin-left .2s ease; }
 .parser-source-card:hover .parser-source-link b { margin-left: 10px; }
 
@@ -246,6 +261,8 @@ body {
 .maps-server-filter-note span { color: #64748b; font-size: 10px; }
 .maps-page.yandex .maps-server-filter-note { border-left-color: #ef3124; background: #fff5f4; }
 .maps-page.yandex .maps-server-filter-note b { color: #991b1b; }
+.maps-page.twogis .maps-server-filter-note { border-left-color: #20a776; background: #f0fdf8; }
+.maps-page.twogis .maps-server-filter-note b { color: #065f46; }
 .maps-fields { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .maps-collect-tags { min-height: 38px; display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
 .maps-collect-tags span { padding: 5px 8px; background: #eff6ff; color: #1d4ed8; border: 1px solid #dbeafe; border-radius: 4px; font-size: 10px; font-weight: 600; }
@@ -254,9 +271,14 @@ body {
 .maps-start.btn-primary:hover { background: #3367d6; }
 .maps-page.yandex .maps-start.btn-primary { background: #ef3124; }
 .maps-page.yandex .maps-start.btn-primary:hover { background: #d92118; }
+.maps-page.twogis .maps-start.btn-primary { background: #20a776; }
+.maps-page.twogis .maps-start.btn-primary:hover { background: #14865e; }
 .maps-page.yandex .maps-flow b { color: #ef3124; }
 .maps-page.yandex .maps-progress > span { background: #ef3124; }
 .maps-page.yandex .maps-query:focus { border-color: #ef3124; box-shadow: 0 0 0 3px rgba(239,49,36,.12); }
+.maps-page.twogis .maps-flow b { color: #20a776; }
+.maps-page.twogis .maps-progress > span { background: #20a776; }
+.maps-page.twogis .maps-query:focus { border-color: #20a776; box-shadow: 0 0 0 3px rgba(32,167,118,.12); }
 .maps-note code { display: inline-block; background: #e2e8f0; color: #0f172a; padding: 6px 9px; border-radius: 4px; font: 11px var(--font-family-mono); }
 .maps-progress { width: 100%; height: 5px; margin-top: 16px; position: relative; background: #e2e8f0; }
 .maps-progress > span { display: block; height: 100%; background: #4285f4; transition: width .25s ease; }
@@ -295,6 +317,8 @@ body {
 .maps-logs { max-height: 260px; overflow-y: auto; padding: 14px 18px; background: #0f172a; color: #94a3b8; font: 11px/1.7 var(--font-family-mono); }
 
 @media (max-width: 900px) {
+  .parser-parallel-panel { align-items: stretch; flex-direction: column; }
+  .parser-parallel-links { width: 100%; }
   .parser-source-grid, .telegram-workspace, .maps-workspace { grid-template-columns: 1fr; }
   .telegram-auth-grid { grid-template-columns: 1fr; }
   .telegram-step-rail { display: none; }

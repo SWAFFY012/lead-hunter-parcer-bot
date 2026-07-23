@@ -13,6 +13,9 @@ router.get('/status', (_req, res) => {
 });
 
 router.post('/start', (req, res) => {
+  if (getParserStatus().isRunning) {
+    return res.status(409).json({ ok: false, error: 'Парсер Google Карт уже работает в другой вкладке.' });
+  }
   const query = String(req.body?.query || '').trim();
   const targetCount = Math.min(100, Math.max(1, Number(req.body?.targetCount) || 30));
   const filters = normalizeMapLeadFilters(req.body?.filters);
@@ -25,7 +28,7 @@ router.post('/start', (req, res) => {
   const url = /^https?:\/\//i.test(query)
     ? query
     : `https://www.google.com/maps/search/${encodeURIComponent(query)}?hl=ru`;
-  startGoogleMapsParsing({ url, targetCount, filters });
+  void startGoogleMapsParsing({ url, targetCount, filters });
   return res.json({ ok: true, query, url, targetCount, filters });
 });
 

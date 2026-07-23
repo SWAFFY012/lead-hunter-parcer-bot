@@ -139,7 +139,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
     });
 
     const searchUrl = `https://yandex.ru/maps/?text=${encodeURIComponent(query)}`;
-    io.emit('parser:log', { message: `Открываем Яндекс Карты: ${query}`, type: 'info' });
+    io.emit('parser:log', { platform: 'yandex_maps', message: `Открываем Яндекс Карты: ${query}`, type: 'info' });
     await searchPage.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     await searchPage.getByRole('button', { name: /Разрешить все|Принять все|Согласен/i }).first().click({ timeout: 2500 }).catch(() => {});
     await searchPage.waitForSelector('a[href*="/maps/org/"]', { timeout: 20_000 });
@@ -160,7 +160,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
     let candidatesChecked = 0;
     let duplicatesSkipped = 0;
     let consecutiveEmptyPages = 0;
-    io.emit('parser:log', { message: `Ищем ${targetCount} компаний, подходящих под выбранные фильтры.`, type: 'info' });
+    io.emit('parser:log', { platform: 'yandex_maps', message: `Ищем ${targetCount} компаний, подходящих под выбранные фильтры.`, type: 'info' });
 
     for (let pageIndex = 0; matchedCount < targetCount; pageIndex++) {
       if (shouldStop) break;
@@ -208,10 +208,10 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
           if (matchesMapLeadFilters(lead, filters)) {
             matchedCount++;
             io.emit('parser:lead', { lead });
-            io.emit('parser:log', { message: `[${matchedCount}/${targetCount}] Подходит: ${card.name}`, type: 'success' });
+            io.emit('parser:log', { platform: 'yandex_maps', message: `[${matchedCount}/${targetCount}] Подходит: ${card.name}`, type: 'success' });
           }
         } catch (error) {
-          io.emit('parser:log', { message: `Не удалось прочитать карточку: ${error.message}`, type: 'error' });
+          io.emit('parser:log', { platform: 'yandex_maps', message: `Не удалось прочитать карточку: ${error.message}`, type: 'error' });
         }
       }
 
@@ -225,6 +225,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
         targetCount,
       });
       io.emit('parser:log', {
+        platform: 'yandex_maps',
         message: `Страница ${pageIndex + 1}: проверено новых ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}, подходит ${matchedCount}.`,
         type: 'info',
       });
@@ -232,13 +233,14 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
     }
 
     io.emit('parser:log', {
+      platform: 'yandex_maps',
       message: matchedCount >= targetCount
         ? `Готово: найдено ${matchedCount} новых подходящих компаний, пропущено из памяти ${duplicatesSkipped}.`
         : `Выдача закончилась: найдено ${matchedCount} из ${targetCount} новых подходящих компаний, проверено ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}.`,
       type: matchedCount >= targetCount ? 'success' : 'warn',
     });
   } catch (error) {
-    io.emit('parser:log', { message: `Ошибка Яндекс Карт: ${error.message}`, type: 'error' });
+    io.emit('parser:log', { platform: 'yandex_maps', message: `Ошибка Яндекс Карт: ${error.message}`, type: 'error' });
   } finally {
     await cleanup();
   }
@@ -258,5 +260,5 @@ async function cleanup() {
   parserRunning = false;
   io.emit('parser:status', { isRunning: false, platform: 'yandex_maps' });
   io.emit('parser:done', { platform: 'yandex_maps' });
-  io.emit('parser:log', { message: 'Парсер Яндекс Карт завершён.', type: 'info' });
+  io.emit('parser:log', { platform: 'yandex_maps', message: 'Парсер Яндекс Карт завершён.', type: 'info' });
 }

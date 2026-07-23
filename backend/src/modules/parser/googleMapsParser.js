@@ -25,13 +25,13 @@ export async function startGoogleMapsParsing(options) {
   const { url, targetCount = 30, campaignId = null, profileId = null, taskId = null } = options;
   const filters = normalizeMapLeadFilters(options.filters);
   if (parserRunning) {
-    io.emit('parser:log', { message: 'Парсер Google Maps уже запущен', type: 'warn' });
+    io.emit('parser:log', { platform: 'google_maps', message: 'Парсер Google Maps уже запущен', type: 'warn' });
     return { success: false, error: 'Already running' };
   }
 
   parserRunning = true;
   shouldStop = false;
-  io.emit('parser:started', { platform: 'google_maps' });
+  io.emit('parser:started', { platform: 'google_maps', targetCount, filters });
   io.emit('parser:status', { isRunning: true, platform: 'google_maps' });
   systemLog('parser', 'info', `Starting Google Maps parser for URL: ${url}`);
 
@@ -45,7 +45,7 @@ export async function startGoogleMapsParsing(options) {
           userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         };
     
-    io.emit('parser:log', { message: 'Launching browser for Google Maps...', type: 'info' });
+    io.emit('parser:log', { platform: 'google_maps', message: 'Запускаем браузер Google Карт…', type: 'info' });
     
     parserBrowser = await playwrightExtra.launch({
       headless: false,
@@ -79,7 +79,7 @@ export async function startGoogleMapsParsing(options) {
       }
     });
 
-    io.emit('parser:log', { message: `Navigating to: ${url}`, type: 'info' });
+    io.emit('parser:log', { platform: 'google_maps', message: `Открываем Google Карты: ${url}`, type: 'info' });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
     // A clean browser profile may receive a Google consent screen first.
@@ -95,12 +95,13 @@ export async function startGoogleMapsParsing(options) {
       .catch(() => false);
     if (!feedFound) {
       io.emit('parser:log', {
+        platform: 'google_maps',
         message: `Список результатов не найден. Страница: ${await page.title()} (${page.url()})`,
         type: 'error',
       });
     }
     
-    io.emit('parser:log', { message: 'Collecting places from the list...', type: 'info' });
+    io.emit('parser:log', { platform: 'google_maps', message: 'Собираем компании из выдачи…', type: 'info' });
     
     const detailsPage = await context.newPage();
     await detailsPage.route('**/*', (route) => {
@@ -115,6 +116,7 @@ export async function startGoogleMapsParsing(options) {
     let consecutiveEmptyScrolls = 0;
 
     io.emit('parser:log', {
+      platform: 'google_maps',
       message: `Ищем ${targetCount} компаний, подходящих под выбранные фильтры.`,
       type: 'info',
     });
@@ -231,7 +233,7 @@ export async function startGoogleMapsParsing(options) {
         if (isMatch) {
           matchedCount++;
           io.emit('parser:lead', { lead });
-          io.emit('parser:log', { message: `[${matchedCount}/${targetCount}] Подходит: ${name}`, type: 'success' });
+          io.emit('parser:log', { platform: 'google_maps', message: `[${matchedCount}/${targetCount}] Подходит: ${name}`, type: 'success' });
         }
 
         if (isMatch && db && cleanPhone.length >= 10) {
@@ -247,9 +249,9 @@ export async function startGoogleMapsParsing(options) {
               VALUES (${cleanPhone}, ${name}, ${title}, ${ad_text}, ${placeUrl}, ${website}, 'google_maps', ${campaignId}, 'new')
               ON CONFLICT (phone) DO NOTHING
             `;
-            io.emit('parser:log', { message: `Сохранено в CRM: ${name} (${cleanPhone})`, type: 'success' });
+            io.emit('parser:log', { platform: 'google_maps', message: `Сохранено в CRM: ${name} (${cleanPhone})`, type: 'success' });
           } catch (dbErr) {
-            io.emit('parser:log', { message: `Ошибка сохранения ${name}: ${dbErr.message}`, type: 'error' });
+            io.emit('parser:log', { platform: 'google_maps', message: `Ошибка сохранения ${name}: ${dbErr.message}`, type: 'error' });
           }
         }
         
@@ -263,7 +265,7 @@ export async function startGoogleMapsParsing(options) {
         }
         
         } catch (err) {
-          io.emit('parser:log', { message: `Не удалось прочитать карточку: ${err.message}`, type: 'error' });
+          io.emit('parser:log', { platform: 'google_maps', message: `Не удалось прочитать карточку: ${err.message}`, type: 'error' });
         }
 
         io.emit('parser:progress', {
@@ -290,6 +292,7 @@ export async function startGoogleMapsParsing(options) {
 
     const finishType = matchedCount >= targetCount ? 'success' : 'warn';
     io.emit('parser:log', {
+      platform: 'google_maps',
       message: matchedCount >= targetCount
         ? `Готово: найдено ${matchedCount} новых подходящих компаний, пропущено из памяти ${duplicatesSkipped}.`
         : `Выдача закончилась: найдено ${matchedCount} из ${targetCount} новых подходящих компаний, проверено ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}.`,
@@ -298,7 +301,7 @@ export async function startGoogleMapsParsing(options) {
 
   } catch (err) {
     systemLog('parser', 'error', 'Google Maps parser crashed', err);
-    io.emit('parser:log', { message: `Критическая ошибка: ${err.message}`, type: 'error' });
+    io.emit('parser:log', { platform: 'google_maps', message: `Критическая ошибка: ${err.message}`, type: 'error' });
   } finally {
     await cleanup();
   }
@@ -306,7 +309,7 @@ export async function startGoogleMapsParsing(options) {
 
 export function stopParsing() {
   shouldStop = true;
-  io.emit('parser:log', { message: 'Остановка парсера...', type: 'warn' });
+  io.emit('parser:log', { platform: 'google_maps', message: 'Остановка парсера...', type: 'warn' });
 }
 
 export function getParserStatus() {
@@ -323,5 +326,5 @@ async function cleanup() {
   parserRunning = false;
   io.emit('parser:status', { isRunning: false, platform: 'google_maps' });
   io.emit('parser:done', { platform: 'google_maps' });
-  io.emit('parser:log', { message: 'Парсер завершен!', type: 'info' });
+  io.emit('parser:log', { platform: 'google_maps', message: 'Парсер Google Карт завершён.', type: 'info' });
 }
