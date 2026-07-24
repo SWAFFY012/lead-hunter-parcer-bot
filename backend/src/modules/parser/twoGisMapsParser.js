@@ -1,7 +1,11 @@
 import { io } from '../../server.js';
 import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
 import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
-import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
+import {
+  getCachedMapLeadState,
+  markMapLeadsPresented,
+  rememberMapLead,
+} from '../../utils/mapLeadCache.js';
 import {
   finishMapParserRun,
   getMapParserRun,
@@ -278,6 +282,8 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
   activeQuery = query;
   matchedCount = 0;
   candidatesChecked = 0;
+  const previousRun = getMapParserRun(PLATFORM, false);
+  await markMapLeadsPresented(previousRun.leads);
   startMapParserRun(PLATFORM, { query, targetCount, filters });
   emitParserEvent('parser:started', { targetCount, filters, query });
   emitParserEvent('parser:status', { isRunning: true, targetCount, query });
@@ -287,6 +293,8 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
     emitParserLog(`Ищем ${targetCount} компаний, подходящих под выбранные фильтры.`);
     const seenFirms = new Set();
     let duplicatesSkipped = 0;
+    let cachedMatchesReused = 0;
+    let cachedRejected = 0;
     let consecutiveEmptyPages = 0;
     let searchHtml = await fetchHtml(searchUrl);
     const viewportCenters = buildViewportCenters(extractSearchCenter(searchHtml));
@@ -309,9 +317,32 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
 
       for (const sourceUrl of newLinks) {
         if (shouldStop || matchedCount >= targetCount) break;
-        const cachedLead = await getCachedMapLead(PLATFORM, sourceUrl);
-        if (cachedLead) {
-          duplicatesSkipped++;
+        const cachedState = await getCachedMapLeadState(PLATFORM, sourceUrl);
+        if (cachedState) {
+          if (cachedState.presentedAt) {
+            duplicatesSkipped++;
+          } else if (matchesMapLeadFilters(cachedState.lead, filters)) {
+            matchedCount++;
+            cachedMatchesReused++;
+            await markMapLeadsPresented([cachedState.lead]);
+            emitParserEvent('parser:lead', { lead: cachedState.lead });
+            emitParserLog(
+              `[${matchedCount}/${targetCount}] Из памяти: ${cachedState.lead.name || 'Компания без названия'}`,
+              'success'
+            );
+          } else {
+            cachedRejected++;
+          }
+          emitParserEvent('parser:progress', {
+            currentPage: pageNumber,
+            totalPages: 0,
+            matchedCount,
+            candidatesChecked,
+            duplicatesSkipped,
+            cachedMatchesReused,
+            cachedRejected,
+            targetCount,
+          });
           continue;
         }
 
@@ -327,6 +358,7 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
 
           if (matchesMapLeadFilters(lead, filters)) {
             matchedCount++;
+            await markMapLeadsPresented([lead]);
             emitParserEvent('parser:lead', { lead });
             emitParserLog(`[${matchedCount}/${targetCount}] Подходит: ${lead.name || 'Компания без названия'}`, 'success');
           }
@@ -343,20 +375,22 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
           matchedCount,
           candidatesChecked,
           duplicatesSkipped,
+          cachedMatchesReused,
+          cachedRejected,
           targetCount,
         });
       }
 
       emitParserLog(
-        `Страница ${pageNumber}: проверено новых ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}, подходит ${matchedCount}.`
+        `Область ${pageNumber}: новых ${candidatesChecked}, выдано из памяти ${cachedMatchesReused}, уже показано ${duplicatesSkipped}, не подошло из памяти ${cachedRejected}, подходит ${matchedCount}.`
       );
       if (consecutiveEmptyPages >= 8) break;
     }
 
     emitParserLog(
       matchedCount >= targetCount
-        ? `Готово: найдено ${matchedCount} новых подходящих компаний, пропущено из памяти ${duplicatesSkipped}.`
-        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount}, проверено ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}.`,
+        ? `Готово: найдено ${matchedCount}, из них быстро взято из памяти ${cachedMatchesReused}; уже показанных пропущено ${duplicatesSkipped}.`
+        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount}, новых проверено ${candidatesChecked}, из памяти выдано ${cachedMatchesReused}, уже показанных пропущено ${duplicatesSkipped}.`,
       matchedCount >= targetCount ? 'success' : 'warn'
     );
   } catch (error) {

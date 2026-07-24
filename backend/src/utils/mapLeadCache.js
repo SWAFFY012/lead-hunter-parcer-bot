@@ -39,6 +39,17 @@ export async function getCachedMapLead(platform, sourceUrl) {
   return cache.leads[cacheKey(platform, sourceUrl)]?.lead || null;
 }
 
+export async function getCachedMapLeadState(platform, sourceUrl) {
+  const cache = await getCache();
+  const entry = cache.leads[cacheKey(platform, sourceUrl)];
+  return entry?.lead
+    ? {
+        lead: entry.lead,
+        presentedAt: entry.presentedAt || entry.savedAt || entry.contactedAt || '',
+      }
+    : null;
+}
+
 export async function rememberMapLead(lead) {
   if (!lead?.platform || !lead?.sourceUrl) return;
   const cache = await getCache();
@@ -49,6 +60,21 @@ export async function rememberMapLead(lead) {
     lead,
   };
   await persistCache(cache);
+}
+
+export async function markMapLeadsPresented(leads) {
+  if (!Array.isArray(leads) || !leads.length) return;
+  const cache = await getCache();
+  const presentedAt = new Date().toISOString();
+  let changed = false;
+  for (const lead of leads) {
+    if (!lead?.platform || !lead?.sourceUrl) continue;
+    const entry = cache.leads[cacheKey(lead.platform, lead.sourceUrl)];
+    if (!entry?.lead || entry.presentedAt) continue;
+    entry.presentedAt = presentedAt;
+    changed = true;
+  }
+  if (changed) await persistCache(cache);
 }
 
 export async function listSavedMapLeads() {
