@@ -302,6 +302,10 @@ body {
 .maps-save-button.saved { border-color: #99f6e4; background: #f0fdfa; color: #0f766e; cursor: default; }
 .maps-remove-button { border-color: transparent; color: #94a3b8; }
 .maps-remove-button:hover { color: #b91c1c; background: #fef2f2; }
+.maps-row-actions { display: flex; align-items: center; gap: 6px; }
+.maps-ignore-button { border: 0; background: transparent; color: #94a3b8; padding: 6px 4px; cursor: pointer; font-size: 10px; font-weight: 700; }
+.maps-ignore-button:hover { color: #b91c1c; }
+.maps-ignore-button:disabled { cursor: wait; opacity: .5; }
 .maps-contact-check { display: inline-flex; align-items: center; gap: 6px; min-width: 92px; padding: 6px 8px; border: 1px solid #dbe3ec; border-radius: 5px; background: #f8fafc; color: #64748b; cursor: pointer; font-size: 10px; font-weight: 700; white-space: nowrap; transition: border-color .16s ease, background .16s ease, color .16s ease; }
 .maps-contact-check:hover { border-color: #94a3b8; background: #fff; }
 .maps-contact-check input { width: 14px; height: 14px; margin: 0; accent-color: #0f766e; cursor: pointer; }

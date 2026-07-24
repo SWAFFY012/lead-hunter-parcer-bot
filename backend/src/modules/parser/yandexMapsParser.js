@@ -4,7 +4,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { io } from '../../server.js';
 import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
 import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
-import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
+import { getCachedMapLead, isMapLeadNameIgnored, rememberMapLead } from '../../utils/mapLeadCache.js';
 import {
   finishMapParserRun,
   getMapParserRun,
@@ -214,6 +214,11 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
           };
           await rememberMapLead(lead);
           candidatesChecked++;
+          if (await isMapLeadNameIgnored(PLATFORM, lead.name)) {
+            duplicatesSkipped++;
+            io.emit('parser:log', { platform: PLATFORM, message: `Скрытая компания пропущена: ${lead.name}`, type: 'info' });
+            continue;
+          }
           if (matchesMapLeadFilters(lead, filters)) {
             matchedCount++;
             recordMapParserLead(PLATFORM, lead);

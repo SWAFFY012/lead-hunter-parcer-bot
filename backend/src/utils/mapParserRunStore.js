@@ -90,6 +90,21 @@ export function recordMapParserContacted(platform, sourceUrl, contactedAt) {
   schedulePersist();
 }
 
+export function removeMapParserLeadsByName(platform, normalizedName) {
+  const run = ensureRun(platform);
+  const normalizeName = (name) => String(name || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[«»"'.,()[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const previousCount = run.leads.length;
+  run.leads = run.leads.filter((lead) => normalizeName(lead.name) !== normalizedName);
+  run.progress.matched = run.leads.length;
+  if (run.leads.length !== previousCount) schedulePersist();
+  return previousCount - run.leads.length;
+}
+
 export function finishMapParserRun(platform) {
   const run = ensureRun(platform);
   run.isRunning = false;

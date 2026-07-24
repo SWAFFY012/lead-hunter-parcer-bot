@@ -74,6 +74,15 @@ function csvCell(value: string | boolean) {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
+function normalizeCompanyName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[«»"'.,()[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function companyWord(count: number) {
   if (count === 1) return 'подходящую компанию';
   if (count > 1 && count < 5) return 'подходящие компании';
@@ -128,6 +137,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [saving, setSaving] = useState(false);
   const [savedNotice, setSavedNotice] = useState('');
   const [contactUpdating, setContactUpdating] = useState<Set<string>>(() => new Set());
+  const [ignoring, setIgnoring] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     localStorage.setItem(`${config.storage}_query`, query);
@@ -186,12 +196,17 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
       if (data?.platform !== config.platform) return;
       setLoading(false);
     };
+    const onLeadRemoved = (data: { platform?: string; normalizedName?: string }) => {
+      if (data.platform !== config.platform || !data.normalizedName) return;
+      setLeads((current) => current.filter((lead) => normalizeCompanyName(lead.name) !== data.normalizedName));
+    };
 
     socket.on('parser:started', onStarted);
     socket.on('parser:progress', onProgress);
     socket.on('parser:lead', onLead);
     socket.on('parser:log', onLog);
     socket.on('parser:done', onDone);
+    socket.on('parser:lead-removed', onLeadRemoved);
     fetch(`${api}/status`)
       .then((response) => response.json())
       .then((data: ParserStatusResponse) => {
@@ -215,6 +230,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
       socket.off('parser:lead', onLead);
       socket.off('parser:log', onLog);
       socket.off('parser:done', onDone);
+      socket.off('parser:lead-removed', onLeadRemoved);
     };
   }, [api, config.name, config.platform, targetCount]);
 
@@ -323,6 +339,31 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
     }
   };
 
+  const ignoreCompany = async (lead: MapLead) => {
+    if (!window.confirm(`Больше не показывать компанию «${lead.name}» в результатах ${config.name}?`)) return;
+    const normalizedName = normalizeCompanyName(lead.name);
+    setIgnoring((current) => new Set(current).add(normalizedName));
+    setError('');
+    try {
+      const response = await fetch(`${savedApi}/ignore-name`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: lead.platform, name: lead.name }),
+      });
+      const data: { error?: string; ignoredName?: string } = await response.json();
+      if (!response.ok || !data.ignoredName) throw new Error(data.error || 'Не удалось скрыть компанию.');
+      setLeads((current) => current.filter((item) => normalizeCompanyName(item.name) !== data.ignoredName));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось скрыть компанию.');
+    } finally {
+      setIgnoring((current) => {
+        const next = new Set(current);
+        next.delete(normalizedName);
+        return next;
+      });
+    }
+  };
+
   const progressPercent = progress.target ? Math.min(100, Math.round((progress.matched / progress.target) * 100)) : 0;
   const savedSourceUrls = new Set(savedLeads.map((lead) => lead.sourceUrl));
   const unsavedLeads = leads.filter((lead) => !savedSourceUrls.has(lead.sourceUrl));
@@ -391,7 +432,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
               <td><div className="maps-socials">{lead.socialLinks?.length ? lead.socialLinks.map((social) => <a key={social.url} href={social.url} target="_blank" rel="noreferrer">{social.platform}</a>) : <span className="maps-missing">Не найдены</span>}</div></td>
               <td>{lead.address || '—'}</td><td>{lead.rating || '—'}</td>
               <td><label className={`maps-contact-check ${lead.contactedAt ? 'contacted' : ''}`}><input type="checkbox" checked={Boolean(lead.contactedAt)} onChange={() => toggleContacted(lead)} disabled={contactUpdating.has(`${lead.platform}:${lead.sourceUrl}`)} /><span>{lead.contactedAt ? 'Написал' : 'Не написал'}</span></label></td>
-              <td><button className={`maps-save-button ${savedSourceUrls.has(lead.sourceUrl) ? 'saved' : ''}`} onClick={() => saveCompanies([lead])} disabled={savedSourceUrls.has(lead.sourceUrl) || saving}>{savedSourceUrls.has(lead.sourceUrl) ? '✓ Сохранено' : 'Сохранить'}</button></td>
+              <td><div className="maps-row-actions"><button className={`maps-save-button ${savedSourceUrls.has(lead.sourceUrl) ? 'saved' : ''}`} onClick={() => saveCompanies([lead])} disabled={savedSourceUrls.has(lead.sourceUrl) || saving}>{savedSourceUrls.has(lead.sourceUrl) ? '✓ Сохранено' : 'Сохранить'}</button>{provider === 'yandex' ? <button className="maps-ignore-button" onClick={() => ignoreCompany(lead)} disabled={ignoring.has(normalizeCompanyName(lead.name))}>Скрыть</button> : null}</div></td>
             </tr>)}
             {!leads.length ? <tr><td colSpan={8} className="telegram-empty">{loading ? `Проверяем выдачу: найдено ${progress.matched} из ${progress.target}…` : 'Настройте условия и запустите поиск'}</td></tr> : null}
           </tbody></table></div>

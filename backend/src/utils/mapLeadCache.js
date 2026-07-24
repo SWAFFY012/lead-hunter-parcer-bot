@@ -14,10 +14,10 @@ async function loadCache() {
   try {
     const parsed = JSON.parse(await readFile(cacheFile, 'utf8'));
     return parsed && typeof parsed === 'object' && parsed.leads
-      ? parsed
-      : { version: 1, leads: {} };
+      ? { ...parsed, ignoredNames: parsed.ignoredNames || {} }
+      : { version: 2, leads: {}, ignoredNames: {} };
   } catch {
-    return { version: 1, leads: {} };
+    return { version: 2, leads: {}, ignoredNames: {} };
   }
 }
 
@@ -98,4 +98,34 @@ export async function setMapLeadContacted(platform, sourceUrl, contacted) {
     savedAt: entry.savedAt || '',
     contactedAt: entry.contactedAt || '',
   };
+}
+
+function normalizeCompanyName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[«»"'.,()[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function ignoredNameKey(platform, name) {
+  return `${platform}:${normalizeCompanyName(name)}`;
+}
+
+export async function isMapLeadNameIgnored(platform, name) {
+  const cache = await getCache();
+  return Boolean(cache.ignoredNames[ignoredNameKey(platform, name)]);
+}
+
+export async function ignoreMapLeadName(platform, name) {
+  const normalizedName = normalizeCompanyName(name);
+  if (!platform || !normalizedName) return '';
+  const cache = await getCache();
+  cache.ignoredNames[ignoredNameKey(platform, normalizedName)] = {
+    name: String(name).trim(),
+    ignoredAt: new Date().toISOString(),
+  };
+  await persistCache(cache);
+  return normalizedName;
 }
