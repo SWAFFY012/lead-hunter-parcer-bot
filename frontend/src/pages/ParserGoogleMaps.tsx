@@ -20,6 +20,7 @@ interface MapLead {
   isClaimed: boolean;
   platform: 'google_maps' | 'yandex_maps' | 'two_gis_maps';
   savedAt?: string;
+  contactedAt?: string;
 }
 
 type PresenceFilter = 'all' | 'with' | 'without';
@@ -81,7 +82,7 @@ function companyWord(count: number) {
 
 function downloadCsv(leads: MapLead[], provider: MapsProvider | 'saved') {
   const rows = [
-    ['Название', 'Категория', 'Телефон', 'Сайт', 'Соцсети', 'Рейтинг', 'Адрес', 'Описание', 'Карточка'],
+    ['Название', 'Категория', 'Телефон', 'Сайт', 'Соцсети', 'Рейтинг', 'Адрес', 'Описание', 'Карточка', 'Написал'],
     ...leads.map((lead) => [
       lead.name,
       lead.title,
@@ -92,6 +93,7 @@ function downloadCsv(leads: MapLead[], provider: MapsProvider | 'saved') {
       lead.address,
       lead.description || '',
       lead.sourceUrl,
+      lead.contactedAt ? new Date(lead.contactedAt).toLocaleDateString('ru-RU') : 'Нет',
     ]),
   ];
   const content = '\uFEFF' + rows.map((row) => row.map(csvCell).join(';')).join('\n');
@@ -125,6 +127,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [savedLeads, setSavedLeads] = useState<MapLead[]>([]);
   const [saving, setSaving] = useState(false);
   const [savedNotice, setSavedNotice] = useState('');
+  const [contactUpdating, setContactUpdating] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     localStorage.setItem(`${config.storage}_query`, query);
@@ -286,6 +289,40 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
     }
   };
 
+  const toggleContacted = async (lead: MapLead) => {
+    const key = `${lead.platform}:${lead.sourceUrl}`;
+    setContactUpdating((current) => new Set(current).add(key));
+    setError('');
+    try {
+      const response = await fetch(`${savedApi}/contacted`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: lead.platform,
+          sourceUrl: lead.sourceUrl,
+          contacted: !lead.contactedAt,
+        }),
+      });
+      const data: { error?: string; lead?: MapLead } = await response.json();
+      if (!response.ok || !data.lead) throw new Error(data.error || 'Не удалось сохранить отметку.');
+      const replaceLead = (current: MapLead[]) => current.map((item) => (
+        item.platform === data.lead?.platform && item.sourceUrl === data.lead.sourceUrl
+          ? { ...item, ...data.lead }
+          : item
+      ));
+      setLeads(replaceLead);
+      setSavedLeads(replaceLead);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось сохранить отметку.');
+    } finally {
+      setContactUpdating((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
   const progressPercent = progress.target ? Math.min(100, Math.round((progress.matched / progress.target) * 100)) : 0;
   const savedSourceUrls = new Set(savedLeads.map((lead) => lead.sourceUrl));
   const unsavedLeads = leads.filter((lead) => !savedSourceUrls.has(lead.sourceUrl));
@@ -346,16 +383,17 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
           </div>
           <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button></div></div>
           {savedNotice ? <div className="maps-saved-notice">✓ {savedNotice}</div> : null}
-          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th><th>Сохранение</th></tr></thead><tbody>
+          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th><th>Написал</th><th>Сохранение</th></tr></thead><tbody>
             {leads.map((lead) => <tr key={lead.sourceUrl}>
               <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.title}</small></td>
               <td>{lead.phone || '—'}</td>
               <td>{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Открыть сайт</a> : <span className="maps-missing">Нет сайта</span>}</td>
               <td><div className="maps-socials">{lead.socialLinks?.length ? lead.socialLinks.map((social) => <a key={social.url} href={social.url} target="_blank" rel="noreferrer">{social.platform}</a>) : <span className="maps-missing">Не найдены</span>}</div></td>
               <td>{lead.address || '—'}</td><td>{lead.rating || '—'}</td>
+              <td><label className={`maps-contact-check ${lead.contactedAt ? 'contacted' : ''}`}><input type="checkbox" checked={Boolean(lead.contactedAt)} onChange={() => toggleContacted(lead)} disabled={contactUpdating.has(`${lead.platform}:${lead.sourceUrl}`)} /><span>{lead.contactedAt ? 'Написал' : 'Не написал'}</span></label></td>
               <td><button className={`maps-save-button ${savedSourceUrls.has(lead.sourceUrl) ? 'saved' : ''}`} onClick={() => saveCompanies([lead])} disabled={savedSourceUrls.has(lead.sourceUrl) || saving}>{savedSourceUrls.has(lead.sourceUrl) ? '✓ Сохранено' : 'Сохранить'}</button></td>
             </tr>)}
-            {!leads.length ? <tr><td colSpan={7} className="telegram-empty">{loading ? `Проверяем выдачу: найдено ${progress.matched} из ${progress.target}…` : 'Настройте условия и запустите поиск'}</td></tr> : null}
+            {!leads.length ? <tr><td colSpan={8} className="telegram-empty">{loading ? `Проверяем выдачу: найдено ${progress.matched} из ${progress.target}…` : 'Настройте условия и запустите поиск'}</td></tr> : null}
           </tbody></table></div>
           <button className="maps-log-toggle" onClick={() => setShowLogs((visible) => !visible)}>{showLogs ? 'Скрыть журнал' : `Показать журнал (${logs.length})`}</button>
           {showLogs ? <div className="maps-logs">{logs.length ? logs.map((log, index) => <div key={`${index}-${log}`}>{log}</div>) : <div>Ждём запуска парсера…</div>}</div> : null}
@@ -367,16 +405,17 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
             <div className="saved-count"><b>{savedLeads.length}</b><span>в работе</span></div>
           </div>
           <div className="maps-result-actions"><span>Можно позвонить или написать позже — список хранится на этом компьютере.</span><button className="btn btn-secondary" onClick={() => downloadCsv(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать сохранённые</button></div>
-          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Соцсети</th><th>Сайт</th><th>Сохранено</th><th></th></tr></thead><tbody>
+          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Соцсети</th><th>Сайт</th><th>Написал</th><th>Сохранено</th><th></th></tr></thead><tbody>
             {savedLeads.map((lead) => <tr key={`${lead.platform}:${lead.sourceUrl}`}>
               <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.platform === 'yandex_maps' ? 'Яндекс Карты' : lead.platform === 'two_gis_maps' ? '2ГИС' : 'Google Карты'} · {lead.address || 'Адрес не указан'}</small></td>
               <td>{lead.phone ? <a href={`tel:${lead.phone}`}>{lead.phone}</a> : '—'}</td>
               <td><div className="maps-socials">{lead.socialLinks?.length ? lead.socialLinks.map((social) => <a key={social.url} href={social.url} target="_blank" rel="noreferrer">{social.platform}</a>) : <span className="maps-missing">Не найдены</span>}</div></td>
               <td>{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Открыть сайт</a> : <span className="maps-missing">Нет сайта</span>}</td>
+              <td><label className={`maps-contact-check ${lead.contactedAt ? 'contacted' : ''}`}><input type="checkbox" checked={Boolean(lead.contactedAt)} onChange={() => toggleContacted(lead)} disabled={contactUpdating.has(`${lead.platform}:${lead.sourceUrl}`)} /><span>{lead.contactedAt ? 'Написал' : 'Не написал'}</span></label></td>
               <td>{lead.savedAt ? new Date(lead.savedAt).toLocaleDateString('ru-RU') : 'Сегодня'}</td>
               <td><button className="maps-remove-button" onClick={() => removeSavedCompany(lead)}>Убрать</button></td>
             </tr>)}
-            {!savedLeads.length ? <tr><td colSpan={6} className="telegram-empty">Сохраните нужные компании из результатов — они появятся здесь.</td></tr> : null}
+            {!savedLeads.length ? <tr><td colSpan={7} className="telegram-empty">Сохраните нужные компании из результатов — они появятся здесь.</td></tr> : null}
           </tbody></table></div>
         </section>
       </main>

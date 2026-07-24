@@ -81,6 +81,15 @@ export function recordMapParserProgress(platform, progress) {
   schedulePersist();
 }
 
+export function recordMapParserContacted(platform, sourceUrl, contactedAt) {
+  const run = ensureRun(platform);
+  const lead = run.leads.find((item) => item.sourceUrl === sourceUrl);
+  if (!lead) return;
+  if (contactedAt) lead.contactedAt = contactedAt;
+  else delete lead.contactedAt;
+  schedulePersist();
+}
+
 export function finishMapParserRun(platform) {
   const run = ensureRun(platform);
   run.isRunning = false;

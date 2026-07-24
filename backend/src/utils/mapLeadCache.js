@@ -42,7 +42,9 @@ export async function getCachedMapLead(platform, sourceUrl) {
 export async function rememberMapLead(lead) {
   if (!lead?.platform || !lead?.sourceUrl) return;
   const cache = await getCache();
-  cache.leads[cacheKey(lead.platform, lead.sourceUrl)] = {
+  const key = cacheKey(lead.platform, lead.sourceUrl);
+  cache.leads[key] = {
+    ...(cache.leads[key] || {}),
     checkedAt: new Date().toISOString(),
     lead,
   };
@@ -53,7 +55,7 @@ export async function listSavedMapLeads() {
   const cache = await getCache();
   return Object.values(cache.leads)
     .filter((entry) => entry.savedAt && entry.lead)
-    .map((entry) => ({ ...entry.lead, savedAt: entry.savedAt }))
+    .map((entry) => ({ ...entry.lead, savedAt: entry.savedAt, contactedAt: entry.contactedAt || '' }))
     .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
 
@@ -80,4 +82,20 @@ export async function removeSavedMapLead(platform, sourceUrl) {
   if (entry) delete entry.savedAt;
   await persistCache(cache);
   return listSavedMapLeads();
+}
+
+export async function setMapLeadContacted(platform, sourceUrl, contacted) {
+  const cache = await getCache();
+  const entry = cache.leads[cacheKey(platform, sourceUrl)];
+  if (!entry?.lead) return null;
+
+  if (contacted) entry.contactedAt ||= new Date().toISOString();
+  else delete entry.contactedAt;
+
+  await persistCache(cache);
+  return {
+    ...entry.lead,
+    savedAt: entry.savedAt || '',
+    contactedAt: entry.contactedAt || '',
+  };
 }
