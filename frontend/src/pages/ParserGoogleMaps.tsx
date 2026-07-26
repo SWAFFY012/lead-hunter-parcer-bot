@@ -21,6 +21,7 @@ interface MapLead {
   platform: 'google_maps' | 'yandex_maps' | 'two_gis_maps';
   savedAt?: string;
   contactedAt?: string;
+  queuedAt?: string;
 }
 
 type PresenceFilter = 'all' | 'with' | 'without';
@@ -136,6 +137,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [error, setError] = useState('');
   const [showLogs, setShowLogs] = useState(false);
   const [savedLeads, setSavedLeads] = useState<MapLead[]>([]);
+  const [outreachLeads, setOutreachLeads] = useState<MapLead[]>([]);
   const [saving, setSaving] = useState(false);
   const [savedNotice, setSavedNotice] = useState('');
   const [contactUpdating, setContactUpdating] = useState<Set<string>>(() => new Set());
@@ -152,9 +154,14 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(savedApi, { signal: controller.signal })
-      .then((response) => response.json())
-      .then((data: { leads?: MapLead[] }) => setSavedLeads(data.leads || []))
+    Promise.all([
+      fetch(savedApi, { signal: controller.signal }).then((response) => response.json()),
+      fetch(`${savedApi}/outreach`, { signal: controller.signal }).then((response) => response.json()),
+    ])
+      .then(([savedData, outreachData]: Array<{ leads?: MapLead[] }>) => {
+        setSavedLeads(savedData.leads || []);
+        setOutreachLeads(outreachData.leads || []);
+      })
       .catch((requestError: Error) => {
         if (requestError.name !== 'AbortError') setError('Не удалось загрузить сохранённые компании.');
       });
@@ -297,6 +304,23 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
     }
   };
 
+  const queueForOutreach = async (lead: MapLead) => {
+    setError('');
+    try {
+      const response = await fetch(`${savedApi}/outreach`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lead }),
+      });
+      const data: { error?: string; leads?: MapLead[] } = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось добавить контакт в рассылку.');
+      setOutreachLeads(data.leads || []);
+      setSavedNotice(`«${lead.name}» добавлен в очередь рассылки.`);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось добавить контакт в рассылку.');
+    }
+  };
+
   const removeSavedCompany = async (lead: MapLead) => {
     try {
       const response = await fetch(savedApi, {
@@ -385,6 +409,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
 
   const progressPercent = progress.target ? Math.min(100, Math.round((progress.matched / progress.target) * 100)) : 0;
   const savedSourceUrls = new Set(savedLeads.map((lead) => lead.sourceUrl));
+  const outreachSourceUrls = new Set(outreachLeads.map((lead) => lead.sourceUrl));
   const unsavedLeads = leads.filter((lead) => !savedSourceUrls.has(lead.sourceUrl));
 
   return (
@@ -444,7 +469,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
           </div>
           <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button></div></div>
           {savedNotice ? <div className="maps-saved-notice">✓ {savedNotice}</div> : null}
-          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th><th>Написал</th><th>Сохранение</th></tr></thead><tbody>
+          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th><th>Написал</th><th>Действия</th></tr></thead><tbody>
             {leads.map((lead) => <tr key={lead.sourceUrl}>
               <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.title}</small></td>
               <td>{lead.phone || '—'}</td>
@@ -452,7 +477,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
               <td><div className="maps-socials">{lead.socialLinks?.length ? lead.socialLinks.map((social) => <a key={social.url} href={social.url} target="_blank" rel="noreferrer">{social.platform}</a>) : <span className="maps-missing">Не найдены</span>}</div></td>
               <td>{lead.address || '—'}</td><td>{lead.rating || '—'}</td>
               <td><label className={`maps-contact-check ${lead.contactedAt ? 'contacted' : ''}`}><input type="checkbox" checked={Boolean(lead.contactedAt)} onChange={() => toggleContacted(lead)} disabled={contactUpdating.has(`${lead.platform}:${lead.sourceUrl}`)} /><span>{lead.contactedAt ? 'Написал' : 'Не написал'}</span></label></td>
-              <td><div className="maps-row-actions"><button className={`maps-save-button ${savedSourceUrls.has(lead.sourceUrl) ? 'saved' : ''}`} onClick={() => saveCompanies([lead])} disabled={savedSourceUrls.has(lead.sourceUrl) || saving}>{savedSourceUrls.has(lead.sourceUrl) ? '✓ Сохранено' : 'Сохранить'}</button>{provider === 'yandex' ? <button className="maps-ignore-button" onClick={() => ignoreCompany(lead)} disabled={ignoring.has(normalizeCompanyName(lead.name))}>Скрыть</button> : null}</div></td>
+              <td><div className="maps-row-actions"><button className={`maps-save-button ${savedSourceUrls.has(lead.sourceUrl) ? 'saved' : ''}`} onClick={() => saveCompanies([lead])} disabled={savedSourceUrls.has(lead.sourceUrl) || saving}>{savedSourceUrls.has(lead.sourceUrl) ? '✓ Сохранено' : 'Сохранить'}</button><button className={`maps-outreach-button ${outreachSourceUrls.has(lead.sourceUrl) ? 'queued' : ''}`} onClick={() => queueForOutreach(lead)} disabled={outreachSourceUrls.has(lead.sourceUrl) || !lead.socialLinks?.some((social) => social.platform.toLowerCase() === 'telegram')}>{outreachSourceUrls.has(lead.sourceUrl) ? '✓ В рассылке' : 'В рассылку'}</button>{provider === 'yandex' ? <button className="maps-ignore-button" onClick={() => ignoreCompany(lead)} disabled={ignoring.has(normalizeCompanyName(lead.name))}>Скрыть</button> : null}</div></td>
             </tr>)}
             {!leads.length ? <tr><td colSpan={8} className="telegram-empty">{loading ? `Проверяем выдачу: найдено ${progress.matched} из ${progress.target}…` : 'Настройте условия и запустите поиск'}</td></tr> : null}
           </tbody></table></div>
@@ -474,7 +499,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
               <td>{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Открыть сайт</a> : <span className="maps-missing">Нет сайта</span>}</td>
               <td><label className={`maps-contact-check ${lead.contactedAt ? 'contacted' : ''}`}><input type="checkbox" checked={Boolean(lead.contactedAt)} onChange={() => toggleContacted(lead)} disabled={contactUpdating.has(`${lead.platform}:${lead.sourceUrl}`)} /><span>{lead.contactedAt ? 'Написал' : 'Не написал'}</span></label></td>
               <td>{lead.savedAt ? new Date(lead.savedAt).toLocaleDateString('ru-RU') : 'Сегодня'}</td>
-              <td><button className="maps-remove-button" onClick={() => removeSavedCompany(lead)}>Убрать</button></td>
+              <td><div className="maps-row-actions"><button className={`maps-outreach-button ${outreachSourceUrls.has(lead.sourceUrl) ? 'queued' : ''}`} onClick={() => queueForOutreach(lead)} disabled={outreachSourceUrls.has(lead.sourceUrl) || !lead.socialLinks?.some((social) => social.platform.toLowerCase() === 'telegram')}>{outreachSourceUrls.has(lead.sourceUrl) ? '✓ В рассылке' : 'В рассылку'}</button><button className="maps-remove-button" onClick={() => removeSavedCompany(lead)}>Убрать</button></div></td>
             </tr>)}
             {!savedLeads.length ? <tr><td colSpan={7} className="telegram-empty">Сохраните нужные компании из результатов — они появятся здесь.</td></tr> : null}
           </tbody></table></div>

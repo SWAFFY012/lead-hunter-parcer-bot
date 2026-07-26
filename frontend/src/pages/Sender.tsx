@@ -31,6 +31,16 @@ interface Stats {
   total: number;
 }
 
+interface OutreachLead {
+  name: string;
+  title?: string;
+  address?: string;
+  platform: string;
+  sourceUrl: string;
+  socialLinks?: Array<{ platform: string; url: string }>;
+  outreachDraft?: string;
+}
+
 interface SenderStatus {
   running?: boolean;
   stats?: Stats;
@@ -91,6 +101,8 @@ export function Sender() {
   const [stats, setStats] = useState<Stats>({ sent: 0, errors: 0, skipped: 0, total: 0 });
   const [isRunning, setIsRunning] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [outreachLeads, setOutreachLeads] = useState<OutreachLead[]>([]);
+  const [generatingDrafts, setGeneratingDrafts] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -98,11 +110,12 @@ export function Sender() {
 
     const loadInitialData = async () => {
       try {
-        const [campaignsData, accountsData, settingsData, statusData] = await Promise.all([
+        const [campaignsData, accountsData, settingsData, statusData, outreachData] = await Promise.all([
           fetchJson(`${apiBase}/campaigns`),
           fetchJson(`${apiBase}/accounts`),
           fetchJson(`${apiBase}/settings`),
-          fetchJson(`${apiBase}/sender/status`)
+          fetchJson(`${apiBase}/sender/status`),
+          fetchJson(`${apiBase}/saved-map-leads/outreach`)
         ]);
 
         if (!isMounted) return;
@@ -123,6 +136,9 @@ export function Sender() {
           const senderStatus = statusData as SenderStatus;
           setIsRunning(Boolean(senderStatus.running));
           if (senderStatus.stats) setStats(senderStatus.stats);
+        }
+        if (isRecord(outreachData) && Array.isArray(outreachData.leads)) {
+          setOutreachLeads(outreachData.leads as unknown as OutreachLead[]);
         }
         setLoadError('');
       } catch (error) {
@@ -228,6 +244,44 @@ export function Sender() {
     }
   };
 
+  const generateOutreachDrafts = async () => {
+    setGeneratingDrafts(true);
+    try {
+      const response = await fetch(`http://${window.location.hostname}:3001/api/saved-map-leads/outreach/generate-drafts`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось подготовить сообщения.');
+      setOutreachLeads(data.leads || []);
+      if (!data.aiAvailable) {
+        addLog({ id: Date.now().toString(), msg: 'Ollama недоступна: подготовлены безопасные шаблонные черновики.', type: 'warn', time: new Date().toLocaleTimeString() });
+      }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Не удалось подготовить сообщения.');
+    } finally {
+      setGeneratingDrafts(false);
+    }
+  };
+
+  const updateOutreachDraft = async (lead: OutreachLead, outreachDraft: string) => {
+    setOutreachLeads((current) => current.map((item) => item.sourceUrl === lead.sourceUrl && item.platform === lead.platform ? { ...item, outreachDraft } : item));
+    await fetch(`http://${window.location.hostname}:3001/api/saved-map-leads/outreach/draft`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: lead.platform, sourceUrl: lead.sourceUrl, outreachDraft }),
+    });
+  };
+
+  const removeOutreachLead = async (lead: OutreachLead) => {
+    const response = await fetch(`http://${window.location.hostname}:3001/api/saved-map-leads/outreach`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: lead.platform, sourceUrl: lead.sourceUrl }),
+    });
+    const data = await response.json();
+    if (response.ok) setOutreachLeads(data.leads || []);
+  };
+
+  const telegramUrl = (lead: OutreachLead) => lead.socialLinks?.find((social) => social.platform.toLowerCase() === 'telegram')?.url || '';
+
   return (
     <div className="flex flex-col h-full">
       <div className="page-header">
@@ -239,6 +293,21 @@ export function Sender() {
 
       <div className="page-body flex flex-col gap-6">
         {loadError ? <div className="telegram-alert">{loadError}</div> : null}
+
+        <div className="card outreach-queue-card">
+          <div className="outreach-queue-header">
+            <div><span className="card-title">Очередь Telegram</span><p>Контакты, выбранные в Google, Яндекс Картах и 2ГИС. Проверьте черновик перед отправкой.</p></div>
+            <button className="btn btn-primary" onClick={generateOutreachDrafts} disabled={!outreachLeads.length || generatingDrafts}>{generatingDrafts ? 'Генерируем…' : 'Подготовить разные сообщения'}</button>
+          </div>
+          <div className="outreach-queue-list">
+            {outreachLeads.map((lead) => <article className="outreach-queue-item" key={`${lead.platform}:${lead.sourceUrl}`}>
+              <div className="outreach-queue-company"><strong>{lead.name}</strong><span>{lead.title || lead.address || 'Компания из карт'}</span></div>
+              <textarea value={lead.outreachDraft || ''} onChange={(event) => setOutreachLeads((current) => current.map((item) => item.sourceUrl === lead.sourceUrl && item.platform === lead.platform ? { ...item, outreachDraft: event.target.value } : item))} onBlur={(event) => updateOutreachDraft(lead, event.target.value)} placeholder="Нажмите «Подготовить разные сообщения» или напишите текст вручную" />
+              <div className="outreach-queue-actions"><a className={`btn btn-secondary ${!telegramUrl(lead) ? 'disabled' : ''}`} href={telegramUrl(lead) || undefined} target="_blank" rel="noreferrer">Открыть Telegram</a><button className="maps-remove-button" onClick={() => removeOutreachLead(lead)}>Убрать</button></div>
+            </article>)}
+            {!outreachLeads.length ? <div className="text-secondary text-center py-10">Выберите компании кнопкой «В рассылку» на странице любого парсера карт.</div> : null}
+          </div>
+        </div>
         
         <div className="card" style={{ padding: '2rem' }}>
           <span className="card-title mb-6">Настройка кампании</span>

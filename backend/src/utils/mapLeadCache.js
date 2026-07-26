@@ -89,6 +89,53 @@ export async function listSavedMapLeads() {
     .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
 
+export async function listOutreachMapLeads() {
+  const cache = await getCache();
+  return Object.values(cache.leads)
+    .filter((entry) => entry.queuedAt && entry.lead)
+    .map((entry) => ({
+      ...entry.lead,
+      queuedAt: entry.queuedAt,
+      outreachDraft: entry.outreachDraft || '',
+    }))
+    .sort((a, b) => b.queuedAt.localeCompare(a.queuedAt));
+}
+
+export async function queueMapLeadForOutreach(lead) {
+  if (!lead?.platform || !lead?.sourceUrl) return listOutreachMapLeads();
+  const cache = await getCache();
+  const key = cacheKey(lead.platform, lead.sourceUrl);
+  const queuedAt = new Date().toISOString();
+  cache.leads[key] = {
+    ...(cache.leads[key] || {}),
+    checkedAt: cache.leads[key]?.checkedAt || queuedAt,
+    queuedAt: cache.leads[key]?.queuedAt || queuedAt,
+    lead,
+  };
+  await persistCache(cache);
+  return listOutreachMapLeads();
+}
+
+export async function removeMapLeadFromOutreach(platform, sourceUrl) {
+  const cache = await getCache();
+  const entry = cache.leads[cacheKey(platform, sourceUrl)];
+  if (entry) {
+    delete entry.queuedAt;
+    delete entry.outreachDraft;
+  }
+  await persistCache(cache);
+  return listOutreachMapLeads();
+}
+
+export async function setMapLeadOutreachDraft(platform, sourceUrl, outreachDraft) {
+  const cache = await getCache();
+  const entry = cache.leads[cacheKey(platform, sourceUrl)];
+  if (!entry?.lead || !entry.queuedAt) return null;
+  entry.outreachDraft = String(outreachDraft || '').trim();
+  await persistCache(cache);
+  return { ...entry.lead, queuedAt: entry.queuedAt, outreachDraft: entry.outreachDraft };
+}
+
 export async function saveMapLeads(leads) {
   const cache = await getCache();
   const savedAt = new Date().toISOString();

@@ -304,6 +304,20 @@ body {
 .maps-remove-button:hover { color: #b91c1c; background: #fef2f2; }
 .maps-clear-button { border-color: #fecaca !important; color: #b91c1c !important; background: #fff !important; }
 .maps-clear-button:hover:not(:disabled) { background: #fef2f2 !important; }
+.maps-outreach-button { border: 1px solid #7c3aed; border-radius: 5px; background: #f5f3ff; color: #6d28d9; cursor: pointer; font-size: 10px; font-weight: 700; padding: 6px 9px; white-space: nowrap; }
+.maps-outreach-button.queued { background: #ede9fe; color: #5b21b6; }
+.maps-outreach-button:disabled { cursor: not-allowed; opacity: .5; }
+.outreach-queue-card { padding: 2rem; }
+.outreach-queue-header, .outreach-queue-item, .outreach-queue-actions { align-items: center; display: flex; gap: 1rem; }
+.outreach-queue-header { justify-content: space-between; margin-bottom: 1.5rem; }
+.outreach-queue-header p { color: var(--color-text-secondary); margin: .5rem 0 0; }
+.outreach-queue-list { display: grid; gap: 1rem; }
+.outreach-queue-item { border-top: 1px solid var(--color-border-weak); padding-top: 1rem; }
+.outreach-queue-company { display: flex; flex: 0 0 220px; flex-direction: column; gap: .35rem; }
+.outreach-queue-company span { color: var(--color-text-secondary); font-size: .85rem; }
+.outreach-queue-item textarea { border: 1px solid var(--color-border-weak); border-radius: 12px; flex: 1; min-height: 92px; padding: .8rem 1rem; resize: vertical; }
+.outreach-queue-actions { flex: 0 0 auto; }
+@media (max-width: 900px) { .outreach-queue-header, .outreach-queue-item { align-items: stretch; flex-direction: column; } .outreach-queue-company { flex-basis: auto; } }
 .maps-row-actions { display: flex; align-items: center; gap: 6px; }
 .maps-ignore-button { border: 0; background: transparent; color: #94a3b8; padding: 6px 4px; cursor: pointer; font-size: 10px; font-weight: 700; }
 .maps-ignore-button:hover { color: #b91c1c; }
