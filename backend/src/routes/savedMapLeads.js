@@ -13,7 +13,6 @@ import {
 } from '../utils/mapLeadCache.js';
 import { io } from '../server.js';
 import { recordMapParserContacted, removeMapParserLeadsByName } from '../utils/mapParserRunStore.js';
-import { getSetting } from '../db/database.js';
 import { checkOllamaStatus, generateOllamaText } from '../modules/ai/ollamaClient.js';
 
 const router = Router();
@@ -57,8 +56,8 @@ router.post('/outreach/generate-drafts', asyncRoute(async (_req, res) => {
   const leads = await listOutreachMapLeads();
   if (!leads.length) return res.status(400).json({ ok: false, error: 'Очередь рассылки пуста.' });
 
-  const ollamaUrl = (await getSetting('ollama_url')) || 'http://127.0.0.1:11434';
-  const model = (await getSetting('ollama_model')) || 'llama3';
+  const ollamaUrl = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
+  const model = process.env.OLLAMA_MODEL || 'llama3';
   const ollamaAvailable = (await checkOllamaStatus(ollamaUrl)).available;
   const fallbackStarts = ['Здравствуйте!', 'Добрый день!', 'Приветствую!', 'Здравствуйте, коллеги!'];
   const generated = [];

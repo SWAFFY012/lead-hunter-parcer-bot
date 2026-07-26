@@ -317,6 +317,7 @@ body {
 .outreach-queue-company span { color: var(--color-text-secondary); font-size: .85rem; }
 .outreach-queue-item textarea { border: 1px solid var(--color-border-weak); border-radius: 12px; flex: 1; min-height: 92px; padding: .8rem 1rem; resize: vertical; }
 .outreach-queue-actions { flex: 0 0 auto; }
+.sender-module-note { background: #fffbeb; border-left: 4px solid #f59e0b; color: #92400e; margin-bottom: 1.25rem; padding: .85rem 1rem; }
 @media (max-width: 900px) { .outreach-queue-header, .outreach-queue-item { align-items: stretch; flex-direction: column; } .outreach-queue-company { flex-basis: auto; } }
 .maps-row-actions { display: flex; align-items: center; gap: 6px; }
 .maps-ignore-button { border: 0; background: transparent; color: #94a3b8; padding: 6px 4px; cursor: pointer; font-size: 10px; font-weight: 700; }

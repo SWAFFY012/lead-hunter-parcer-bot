@@ -101,6 +101,7 @@ export function Sender() {
   const [stats, setStats] = useState<Stats>({ sent: 0, errors: 0, skipped: 0, total: 0 });
   const [isRunning, setIsRunning] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [legacyLoadError, setLegacyLoadError] = useState('');
   const [outreachLeads, setOutreachLeads] = useState<OutreachLead[]>([]);
   const [generatingDrafts, setGeneratingDrafts] = useState(false);
 
@@ -109,6 +110,17 @@ export function Sender() {
     const apiBase = `http://${window.location.hostname}:3001/api`;
 
     const loadInitialData = async () => {
+      fetchJson(`${apiBase}/saved-map-leads/outreach`)
+        .then((outreachData) => {
+          if (!isMounted) return;
+          if (isRecord(outreachData) && Array.isArray(outreachData.leads)) {
+            setOutreachLeads(outreachData.leads as unknown as OutreachLead[]);
+          }
+          setLoadError('');
+        })
+        .catch((error: Error) => {
+          if (isMounted) setLoadError(error.message || 'Не удалось загрузить очередь Telegram.');
+        });
       try {
         const [campaignsData, accountsData, settingsData, statusData, outreachData] = await Promise.all([
           fetchJson(`${apiBase}/campaigns`),
@@ -146,7 +158,7 @@ export function Sender() {
         const message = error instanceof Error ? error.message : 'Не удалось загрузить данные рассылки.';
         setCampaigns([]);
         setAccounts([]);
-        setLoadError(message);
+        setLegacyLoadError(message);
       }
     };
 
@@ -310,6 +322,7 @@ export function Sender() {
         </div>
         
         <div className="card" style={{ padding: '2rem' }}>
+          {legacyLoadError ? <div className="sender-module-note">{legacyLoadError}</div> : null}
           <span className="card-title mb-6">Настройка кампании</span>
           <div className="grid-2 mb-6" style={{ gap: '2rem' }}>
             <div>
@@ -344,7 +357,7 @@ export function Sender() {
 
           <div className="flex gap-4 pt-6" style={{ borderTop: '1px solid var(--color-border-weak)' }}>
             {!isRunning ? (
-              <button disabled={Boolean(loadError)} onClick={startSending} className="btn btn-primary flex-1" style={{ maxWidth: '240px', justifyContent: 'center', padding: '12px' }}>
+              <button disabled={Boolean(legacyLoadError)} onClick={startSending} className="btn btn-primary flex-1" style={{ maxWidth: '240px', justifyContent: 'center', padding: '12px' }}>
                 ▶ Запустить рассылку
               </button>
             ) : (
