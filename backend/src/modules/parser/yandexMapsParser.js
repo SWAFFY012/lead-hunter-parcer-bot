@@ -2,8 +2,8 @@ import { chromium } from 'playwright';
 import { addExtra } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { io } from '../../server.js';
-import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
-import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
+import { collectSocialLinks, crawlWebsiteSocialLinks, mergeSocialLinks } from '../../utils/socialExtractor.js';
+import { matchesMapLeadFilters, normalizeMapLeadFilters, shouldCrawlMapLeadWebsiteSocials } from '../../utils/mapLeadFilter.js';
 import { getCachedMapLead, isMapLeadNameIgnored, rememberMapLead } from '../../utils/mapLeadCache.js';
 import {
   finishMapParserRun,
@@ -202,9 +202,9 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
           await sleep(500, 900);
           const card = await extractCard(detailsPage);
           const cardSocialLinks = await collectCardSocials(detailsPage);
-          const socialLinks = cardSocialLinks.length
-            ? cardSocialLinks
-            : await crawlWebsiteSocialLinks(card.website);
+          const socialLinks = shouldCrawlMapLeadWebsiteSocials(cardSocialLinks, card.website, filters)
+            ? mergeSocialLinks(cardSocialLinks, await crawlWebsiteSocialLinks(card.website))
+            : cardSocialLinks;
           const lead = {
             ...card,
             socialLinks,

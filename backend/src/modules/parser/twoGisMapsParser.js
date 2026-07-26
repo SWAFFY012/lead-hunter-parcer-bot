@@ -1,6 +1,11 @@
 import { io } from '../../server.js';
-import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
-import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
+import { collectSocialLinks, crawlWebsiteSocialLinks, mergeSocialLinks } from '../../utils/socialExtractor.js';
+import {
+  hasMapLeadSocialPlatform,
+  matchesMapLeadFilters,
+  normalizeMapLeadFilters,
+  shouldCrawlMapLeadWebsiteSocials,
+} from '../../utils/mapLeadFilter.js';
 import {
   getCachedMapLeadState,
   markMapLeadsPresented,
@@ -92,9 +97,12 @@ function failsFixedFilters(lead, filters) {
 
 function shouldRefreshCachedLead(cachedState, filters) {
   if (!cachedState?.lead) return false;
+  if (cachedState.socialScanAt) return false;
+  if (filters.socialPlatform !== 'all' && !hasMapLeadSocialPlatform(cachedState.lead, filters.socialPlatform)) {
+    return !failsFixedFilters(cachedState.lead, filters);
+  }
   if (filters.socials !== 'with') return false;
   if (cachedState.lead.socialLinks?.length) return false;
-  if (cachedState.socialScanAt) return false;
   return !failsFixedFilters(cachedState.lead, filters);
 }
 
@@ -370,9 +378,9 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
         try {
           const companyHtml = await fetchHtml(sourceUrl);
           const card = parseTwoGisCompanyHtml(companyHtml, sourceUrl);
-          const socialLinks = card.socialLinks.length || failsFixedFilters(card, filters)
-            ? card.socialLinks
-            : await crawlWebsiteSocialLinks(card.website);
+          const socialLinks = !failsFixedFilters(card, filters) && shouldCrawlMapLeadWebsiteSocials(card.socialLinks, card.website, filters)
+            ? mergeSocialLinks(card.socialLinks, await crawlWebsiteSocialLinks(card.website))
+            : card.socialLinks;
           const lead = { ...card, socialLinks };
           await rememberMapLead(lead, { socialScanAt: true });
           candidatesChecked++;

@@ -24,6 +24,7 @@ interface MapLead {
 }
 
 type PresenceFilter = 'all' | 'with' | 'without';
+type SocialPlatformFilter = 'all' | 'telegram';
 type MapsProvider = 'google' | 'yandex' | 'twoGis';
 const targetOptions = [1, 3, 5, 10, 30, 50, 100] as const;
 
@@ -127,6 +128,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [websiteFilter, setWebsiteFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_website`) as PresenceFilter) || 'all');
   const [phoneFilter, setPhoneFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_phone`) as PresenceFilter) || 'all');
   const [socialFilter, setSocialFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_socials`) as PresenceFilter) || 'all');
+  const [socialPlatformFilter, setSocialPlatformFilter] = useState<SocialPlatformFilter>(() => (localStorage.getItem(`${config.storage}_social_platform`) as SocialPlatformFilter) || 'all');
   const [leads, setLeads] = useState<MapLead[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -145,7 +147,8 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
     localStorage.setItem(`${config.storage}_website`, websiteFilter);
     localStorage.setItem(`${config.storage}_phone`, phoneFilter);
     localStorage.setItem(`${config.storage}_socials`, socialFilter);
-  }, [config.storage, phoneFilter, query, socialFilter, targetCount, websiteFilter]);
+    localStorage.setItem(`${config.storage}_social_platform`, socialPlatformFilter);
+  }, [config.storage, phoneFilter, query, socialFilter, socialPlatformFilter, targetCount, websiteFilter]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -252,7 +255,12 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
         body: JSON.stringify({
           query,
           targetCount,
-          filters: { website: websiteFilter, phone: phoneFilter, socials: socialFilter },
+          filters: {
+            website: websiteFilter,
+            phone: phoneFilter,
+            socials: socialFilter,
+            socialPlatform: socialPlatformFilter,
+          },
         }),
       });
       const data = await response.json();
@@ -409,6 +417,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
               <label>Сайт<select value={websiteFilter} onChange={(event) => setWebsiteFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть сайт</option><option value="without">Нет сайта</option></select></label>
               <label>Телефон<select value={phoneFilter} onChange={(event) => setPhoneFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть телефон</option><option value="without">Нет телефона</option></select></label>
               <label>Telegram / WhatsApp / Instagram<select value={socialFilter} onChange={(event) => setSocialFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть хотя бы одна</option><option value="without">Нет ни одной</option></select></label>
+              <label>Telegram<select value={socialPlatformFilter} onChange={(event) => setSocialPlatformFilter(event.target.value as SocialPlatformFilter)} disabled={loading}><option value="all">Неважно</option><option value="telegram">Только с Telegram</option></select></label>
             </div>
 
             {loading ? <button type="button" className="btn btn-secondary maps-start" onClick={stopParsing}>Остановить сбор</button> : <button className="btn btn-primary maps-start">Найти {targetCount} {companyWord(targetCount)}</button>}

@@ -5,8 +5,8 @@ import { getDb, hasDatabaseConfig } from '../../db/database.js';
 import { io } from '../../server.js';
 import { systemLog } from '../../utils/logger.js';
 import { getProfile, buildContextOptions, applyFingerprintScripts } from '../fingerprint/profileManager.js';
-import { collectSocialLinks, crawlWebsiteSocialLinks } from '../../utils/socialExtractor.js';
-import { matchesMapLeadFilters, normalizeMapLeadFilters } from '../../utils/mapLeadFilter.js';
+import { collectSocialLinks, crawlWebsiteSocialLinks, mergeSocialLinks } from '../../utils/socialExtractor.js';
+import { matchesMapLeadFilters, normalizeMapLeadFilters, shouldCrawlMapLeadWebsiteSocials } from '../../utils/mapLeadFilter.js';
 import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
 import {
   finishMapParserRun,
@@ -218,9 +218,9 @@ export async function startGoogleMapsParsing(options) {
         
         const { name, title, phone, website, rating, address, isClaimed, socialUrls } = extractedData;
         const cardSocialLinks = collectSocialLinks(socialUrls);
-        const socialLinks = cardSocialLinks.length
-          ? cardSocialLinks
-          : await crawlWebsiteSocialLinks(website);
+        const socialLinks = shouldCrawlMapLeadWebsiteSocials(cardSocialLinks, website, filters)
+          ? mergeSocialLinks(cardSocialLinks, await crawlWebsiteSocialLinks(website))
+          : cardSocialLinks;
         
         const rawPhone = phone || '';
         const cleanPhone = rawPhone.replace(/\D/g, '');
