@@ -82,6 +82,22 @@ let matchedCount = 0;
 let candidatesChecked = 0;
 const activeControllers = new Set();
 
+function failsFixedFilters(lead, filters) {
+  if (filters.website === 'with' && !lead.website) return true;
+  if (filters.website === 'without' && lead.website) return true;
+  if (filters.phone === 'with' && !lead.phone) return true;
+  if (filters.phone === 'without' && lead.phone) return true;
+  return false;
+}
+
+function shouldRefreshCachedLead(cachedState, filters) {
+  if (!cachedState?.lead) return false;
+  if (filters.socials !== 'with') return false;
+  if (cachedState.lead.socialLinks?.length) return false;
+  if (cachedState.socialScanAt) return false;
+  return !failsFixedFilters(cachedState.lead, filters);
+}
+
 function emitParserEvent(event, payload = {}) {
   if (event === 'parser:lead' && payload.lead) recordMapParserLead(PLATFORM, payload.lead);
   if (event === 'parser:progress') recordMapParserProgress(PLATFORM, payload);
@@ -151,12 +167,15 @@ export function buildTwoGisSearchUrl(rawQuery) {
 
   const normalized = normalizeText(query);
   const knownCity = cityAliases.find(([city]) => normalized === city || normalized.startsWith(`${city} `));
+  const queryWords = query.split(/\s+/).filter(Boolean);
+  const cityWordCount = knownCity ? knownCity[0].split(/\s+/).length : 1;
+  const searchTerm = queryWords.slice(cityWordCount).join(' ') || query;
   const firstWord = normalized.split(' ')[0];
   const cityAlias = knownCity?.[1] || transliterate(firstWord);
   if (!cityAlias) {
     throw new Error('Не удалось определить город. Введите город первым словом или вставьте ссылку поиска 2ГИС.');
   }
-  return `https://2gis.ru/${cityAlias}/search/${encodeURIComponent(query)}`;
+  return `https://2gis.ru/${cityAlias}/search/${encodeURIComponent(searchTerm)}`;
 }
 
 async function fetchHtml(url) {
@@ -253,8 +272,10 @@ export function parseTwoGisCompanyHtml(html, sourceUrl) {
   const categoryMatch = companyHtml.match(/<\/h1>\s*<div[^>]*>\s*<span[^>]*>([\s\S]*?)<\/span>/i);
   const addressMatch = companyHtml.match(/<a[^>]+href="\/[^"]+\/geo\/[^"]+"[^>]*>([\s\S]*?)<\/a>/i);
   const hrefs = [...companyHtml.matchAll(/href="([^"]+)"/gi)].map((match) => decodeHtml(match[1]));
+  const inlineUrls = [...companyHtml.matchAll(/https?:\/\/(?:t\.me|telegram\.me|wa\.me|whatsapp\.com|(?:www\.)?instagram\.com)\/[^\s"'<>\\]+/gi)]
+    .map((match) => decodeHtml(match[0]));
   const phoneHref = hrefs.find((href) => href.startsWith('tel:')) || '';
-  const socialLinks = collectSocialLinks(hrefs);
+  const socialLinks = collectSocialLinks([...hrefs, ...inlineUrls]);
   const ratingDescription = metaContent(html, 'og:description');
 
   return {
@@ -318,7 +339,7 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
       for (const sourceUrl of newLinks) {
         if (shouldStop || matchedCount >= targetCount) break;
         const cachedState = await getCachedMapLeadState(PLATFORM, sourceUrl);
-        if (cachedState) {
+        if (cachedState && !shouldRefreshCachedLead(cachedState, filters)) {
           if (cachedState.presentedAt) {
             duplicatesSkipped++;
           } else if (matchesMapLeadFilters(cachedState.lead, filters)) {
@@ -349,11 +370,11 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
         try {
           const companyHtml = await fetchHtml(sourceUrl);
           const card = parseTwoGisCompanyHtml(companyHtml, sourceUrl);
-          const socialLinks = card.socialLinks.length
+          const socialLinks = card.socialLinks.length || failsFixedFilters(card, filters)
             ? card.socialLinks
             : await crawlWebsiteSocialLinks(card.website);
           const lead = { ...card, socialLinks };
-          await rememberMapLead(lead);
+          await rememberMapLead(lead, { socialScanAt: true });
           candidatesChecked++;
 
           if (matchesMapLeadFilters(lead, filters)) {

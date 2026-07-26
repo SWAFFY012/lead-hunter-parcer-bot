@@ -45,18 +45,22 @@ export async function getCachedMapLeadState(platform, sourceUrl) {
   return entry?.lead
     ? {
         lead: entry.lead,
+        socialScanAt: entry.socialScanAt || '',
         presentedAt: entry.presentedAt || entry.savedAt || entry.contactedAt || '',
       }
     : null;
 }
 
-export async function rememberMapLead(lead) {
+export async function rememberMapLead(lead, options = {}) {
   if (!lead?.platform || !lead?.sourceUrl) return;
   const cache = await getCache();
   const key = cacheKey(lead.platform, lead.sourceUrl);
   cache.leads[key] = {
     ...(cache.leads[key] || {}),
     checkedAt: new Date().toISOString(),
+    socialScanAt: options.socialScanAt
+      ? new Date().toISOString()
+      : cache.leads[key]?.socialScanAt || '',
     lead,
   };
   await persistCache(cache);
