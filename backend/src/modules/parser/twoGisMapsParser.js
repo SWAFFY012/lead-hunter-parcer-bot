@@ -247,6 +247,13 @@ function buildViewportCenters(center) {
   return centers;
 }
 
+function buildTwoGisPageUrl(searchUrl, pageNumber) {
+  const url = new URL(searchUrl);
+  url.pathname = url.pathname.replace(/\/page\/\d+\/?$/i, '').replace(/\/$/, '');
+  if (pageNumber > 1) url.pathname += `/page/${pageNumber}`;
+  return url.href;
+}
+
 function extractWebsite(hrefs) {
   for (const rawHref of hrefs) {
     const href = decodeHtml(rawHref);
@@ -325,16 +332,11 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
     let cachedMatchesReused = 0;
     let cachedRejected = 0;
     let consecutiveEmptyPages = 0;
-    let searchHtml = await fetchHtml(searchUrl);
-    const viewportCenters = buildViewportCenters(extractSearchCenter(searchHtml));
+    let searchHtml = await fetchHtml(buildTwoGisPageUrl(searchUrl, 1));
 
     for (let pageNumber = 1; matchedCount < targetCount && !shouldStop; pageNumber++) {
       if (pageNumber > 1) {
-        const viewport = viewportCenters[pageNumber - 2];
-        if (!viewport) break;
-        const pageUrl = new URL(searchUrl);
-        pageUrl.searchParams.set('m', `${viewport.longitude},${viewport.latitude}/13`);
-        searchHtml = await fetchHtml(pageUrl.href);
+        searchHtml = await fetchHtml(buildTwoGisPageUrl(searchUrl, pageNumber));
       }
       const pageLinks = extractTwoGisFirmLinks(searchHtml);
       const newLinks = pageLinks.filter((sourceUrl) => {
@@ -413,7 +415,10 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
       emitParserLog(
         `Область ${pageNumber}: новых ${candidatesChecked}, выдано из памяти ${cachedMatchesReused}, уже показано ${duplicatesSkipped}, не подошло из памяти ${cachedRejected}, подходит ${matchedCount}.`
       );
-      if (consecutiveEmptyPages >= 8) break;
+      if (consecutiveEmptyPages >= 5) {
+        emitParserLog('2ГИС пять страниц подряд не вернул новых компаний — выдача действительно закончилась.', 'warn');
+        break;
+      }
     }
 
     emitParserLog(

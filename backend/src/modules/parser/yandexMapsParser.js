@@ -246,7 +246,14 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
         message: `Страница ${pageIndex + 1}: проверено новых ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}, подходит ${matchedCount}.`,
         type: 'info',
       });
-      if (consecutiveEmptyPages >= 2) break;
+      if (consecutiveEmptyPages >= 5) {
+        io.emit('parser:log', {
+          platform: 'yandex_maps',
+          message: 'Яндекс Карты пять страниц подряд не вернули новых компаний — выдача действительно закончилась.',
+          type: 'warn',
+        });
+        break;
+      }
     }
 
     io.emit('parser:log', {
