@@ -302,6 +302,8 @@ body {
 .maps-save-button.saved { border-color: #99f6e4; background: #f0fdfa; color: #0f766e; cursor: default; }
 .maps-remove-button { border-color: transparent; color: #94a3b8; }
 .maps-remove-button:hover { color: #b91c1c; background: #fef2f2; }
+.maps-clear-button { border-color: #fecaca !important; color: #b91c1c !important; background: #fff !important; }
+.maps-clear-button:hover:not(:disabled) { background: #fef2f2 !important; }
 .maps-row-actions { display: flex; align-items: center; gap: 6px; }
 .maps-ignore-button { border: 0; background: transparent; color: #94a3b8; padding: 6px 4px; cursor: pointer; font-size: 10px; font-weight: 700; }
 .maps-ignore-button:hover { color: #b91c1c; }

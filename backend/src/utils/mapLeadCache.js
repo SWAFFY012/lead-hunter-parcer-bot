@@ -114,6 +114,18 @@ export async function removeSavedMapLead(platform, sourceUrl) {
   return listSavedMapLeads();
 }
 
+export async function removeAllSavedMapLeads() {
+  const cache = await getCache();
+  let changed = false;
+  for (const entry of Object.values(cache.leads)) {
+    if (!entry?.savedAt) continue;
+    delete entry.savedAt;
+    changed = true;
+  }
+  if (changed) await persistCache(cache);
+  return listSavedMapLeads();
+}
+
 export async function setMapLeadContacted(platform, sourceUrl, contacted) {
   const cache = await getCache();
   const entry = cache.leads[cacheKey(platform, sourceUrl)];

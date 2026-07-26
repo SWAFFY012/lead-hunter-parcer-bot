@@ -298,7 +298,6 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   };
 
   const removeSavedCompany = async (lead: MapLead) => {
-    if (!window.confirm(`Убрать «${lead.name || 'компанию'}» из сохранённых?`)) return;
     try {
       const response = await fetch(savedApi, {
         method: 'DELETE',
@@ -310,6 +309,18 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
       setSavedLeads(data.leads || []);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось удалить компанию.');
+    }
+  };
+
+  const removeAllSavedCompanies = async () => {
+    try {
+      const response = await fetch(`${savedApi}/all`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось очистить сохранённые компании.');
+      setSavedLeads(data.leads || []);
+      setSavedNotice('Сохранённый список очищен.');
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось очистить сохранённые компании.');
     }
   };
 
@@ -454,7 +465,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
             <div><span className="panel-label">МОЯ БАЗА ДЛЯ СВЯЗИ</span><h2>Сохранённые компании</h2><p>Контакты останутся здесь после нового поиска и перезапуска.</p></div>
             <div className="saved-count"><b>{savedLeads.length}</b><span>в работе</span></div>
           </div>
-          <div className="maps-result-actions"><span>Можно позвонить или написать позже — список хранится на этом компьютере.</span><button className="btn btn-secondary" onClick={() => downloadCsv(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать сохранённые</button></div>
+          <div className="maps-result-actions"><span>Можно позвонить или написать позже — список хранится на этом компьютере.</span><div className="maps-action-buttons"><button className="btn btn-secondary" onClick={() => downloadCsv(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать сохранённые</button><button className="btn btn-secondary maps-clear-button" onClick={removeAllSavedCompanies} disabled={!savedLeads.length}>Убрать всё</button></div></div>
           <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Соцсети</th><th>Сайт</th><th>Написал</th><th>Сохранено</th><th></th></tr></thead><tbody>
             {savedLeads.map((lead) => <tr key={`${lead.platform}:${lead.sourceUrl}`}>
               <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.platform === 'yandex_maps' ? 'Яндекс Карты' : lead.platform === 'two_gis_maps' ? '2ГИС' : 'Google Карты'} · {lead.address || 'Адрес не указан'}</small></td>

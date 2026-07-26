@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   listSavedMapLeads,
   ignoreMapLeadName,
+  removeAllSavedMapLeads,
   removeSavedMapLead,
   saveMapLeads,
   setMapLeadContacted,
@@ -51,6 +52,11 @@ router.delete('/', asyncRoute(async (req, res) => {
   const sourceUrl = String(req.body?.sourceUrl || '');
   if (!platform || !sourceUrl) return res.status(400).json({ ok: false, error: 'Не указана компания.' });
   const savedLeads = await removeSavedMapLead(platform, sourceUrl);
+  return res.json({ ok: true, leads: savedLeads });
+}));
+
+router.delete('/all', asyncRoute(async (_req, res) => {
+  const savedLeads = await removeAllSavedMapLeads();
   return res.json({ ok: true, leads: savedLeads });
 }));
 
