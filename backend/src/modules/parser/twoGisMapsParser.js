@@ -210,9 +210,27 @@ async function fetchHtml(url) {
 
 export function extractTwoGisFirmLinks(html) {
   const links = new Set();
-  for (const match of String(html || '').matchAll(/href="(\/[^"]+\/firm\/\d+[^"]*)"/gi)) {
-    const path = decodeHtml(match[1]).match(/^\/([^/]+)\/firm\/(\d+)/);
+  const normalizedHtml = decodeHtml(String(html || ''))
+    .replace(/\\u002[fF]/g, '/')
+    .replace(/\\\//g, '/')
+    .replace(/&quot;/gi, '"');
+
+  const addPath = (rawPath) => {
+    const cleanPath = decodeHtml(rawPath)
+      .replace(/^https?:\/\/(?:www\.)?2gis\.ru/i, '')
+      .split(/[?#]/)[0];
+    const path = cleanPath.match(/^\/([^/]+)\/firm\/(\d+)/i);
     if (path) links.add(`https://2gis.ru/${path[1]}/firm/${path[2]}`);
+  };
+
+  for (const match of normalizedHtml.matchAll(/href=["'](\/[^"']+\/firm\/\d+[^"']*)["']/gi)) {
+    addPath(match[1]);
+  }
+  for (const match of normalizedHtml.matchAll(/["'](\/[^"'\\]+\/firm\/\d+[^"'\\]*)["']/gi)) {
+    addPath(match[1]);
+  }
+  for (const match of normalizedHtml.matchAll(/https?:\/\/(?:www\.)?2gis\.ru(\/[^"'\s\\<>]+\/firm\/\d+[^"'\s\\<>]*)/gi)) {
+    addPath(match[1]);
   }
   return [...links];
 }
@@ -335,21 +353,27 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
     let searchHtml = await fetchHtml(buildTwoGisPageUrl(searchUrl, 1));
 
     for (let pageNumber = 1; matchedCount < targetCount && !shouldStop; pageNumber++) {
+      const pageUrl = buildTwoGisPageUrl(searchUrl, pageNumber);
       if (pageNumber > 1) {
-        searchHtml = await fetchHtml(buildTwoGisPageUrl(searchUrl, pageNumber));
+        searchHtml = await fetchHtml(pageUrl);
       }
       const pageLinks = extractTwoGisFirmLinks(searchHtml);
+      emitParserLog(`2ГИС страница ${pageNumber}: найдено карточек в выдаче ${pageLinks.length}.`);
       const newLinks = pageLinks.filter((sourceUrl) => {
         if (seenFirms.has(sourceUrl)) return false;
         seenFirms.add(sourceUrl);
         return true;
       });
+      if (!pageLinks.length) {
+        emitParserLog(`2ГИС не отдал карточки на странице ${pageNumber}: ${pageUrl}`, 'warn');
+      }
       consecutiveEmptyPages = newLinks.length ? 0 : consecutiveEmptyPages + 1;
 
       for (const sourceUrl of newLinks) {
         if (shouldStop || matchedCount >= targetCount) break;
         const cachedState = await getCachedMapLeadState(PLATFORM, sourceUrl);
         if (cachedState && !shouldRefreshCachedLead(cachedState, filters)) {
+          candidatesChecked++;
           if (cachedState.presentedAt) {
             duplicatesSkipped++;
           } else if (matchesMapLeadFilters(cachedState.lead, filters)) {
@@ -413,7 +437,7 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
       }
 
       emitParserLog(
-        `Область ${pageNumber}: новых ${candidatesChecked}, выдано из памяти ${cachedMatchesReused}, уже показано ${duplicatesSkipped}, не подошло из памяти ${cachedRejected}, подходит ${matchedCount}.`
+        `Страница ${pageNumber}: проверено карточек ${candidatesChecked}, выдано из памяти ${cachedMatchesReused}, уже показано ${duplicatesSkipped}, не подошло из памяти ${cachedRejected}, подходит ${matchedCount}.`
       );
       if (consecutiveEmptyPages >= 5) {
         emitParserLog('2ГИС пять страниц подряд не вернул новых компаний — выдача действительно закончилась.', 'warn');
@@ -424,7 +448,7 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
     emitParserLog(
       matchedCount >= targetCount
         ? `Готово: найдено ${matchedCount}, из них быстро взято из памяти ${cachedMatchesReused}; уже показанных пропущено ${duplicatesSkipped}.`
-        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount}, новых проверено ${candidatesChecked}, из памяти выдано ${cachedMatchesReused}, уже показанных пропущено ${duplicatesSkipped}.`,
+        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount}, проверено карточек ${candidatesChecked}, из памяти выдано ${cachedMatchesReused}, уже показанных пропущено ${duplicatesSkipped}.`,
       matchedCount >= targetCount ? 'success' : 'warn'
     );
   } catch (error) {
