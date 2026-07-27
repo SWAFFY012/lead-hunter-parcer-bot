@@ -279,7 +279,19 @@ function buildTwoGisAreaPageUrl(searchUrl, pageNumber, center) {
   return url.href;
 }
 
-function extractWebsite(hrefs) {
+const websiteServiceHosts = /(^|\.)(?:yclients\.com|clients\.site|dikidi\.net|alteg\.io|bookform\.ru|sonline\.su)$/i;
+
+function isWebsiteServiceUrl(href) {
+  try {
+    return websiteServiceHosts.test(new URL(href).hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function extractTwoGisWebsite(hrefs) {
+  const candidates = [];
+
   for (const rawHref of hrefs) {
     const href = decodeHtml(rawHref);
     if (/^(?:tel:|https?:\/\/(?:t\.me|telegram\.me|wa\.me|whatsapp\.com|(?:www\.)?instagram\.com))/i.test(href)) continue;
@@ -294,12 +306,15 @@ function extractWebsite(hrefs) {
       const url = new URL(candidate);
       if (!['http:', 'https:'].includes(url.protocol)) continue;
       if (/(^|\.)2gis\.(?:ru|com)$/i.test(url.hostname) || /(^|\.)max\.ru$/i.test(url.hostname)) continue;
-      return url.href;
+      candidates.push(url.href);
     } catch {
       // Malformed advertising and service links are ignored.
     }
   }
-  return '';
+
+  // 2ГИС часто размещает кнопку онлайн-записи раньше официального сайта.
+  // Системы записи не считаем сайтом компании и выбираем первый реальный домен.
+  return candidates.find((href) => !isWebsiteServiceUrl(href)) || '';
 }
 
 export function parseTwoGisCompanyHtml(html, sourceUrl) {
@@ -322,7 +337,7 @@ export function parseTwoGisCompanyHtml(html, sourceUrl) {
     name: cleanHtmlText(headingMatch?.[1]),
     title: cleanHtmlText(categoryMatch?.[1]),
     phone: phoneHref.replace(/^tel:/i, ''),
-    website: extractWebsite(hrefs),
+    website: extractTwoGisWebsite(hrefs),
     rating: (ratingDescription.match(/Оценка\s*([\d.,]+)/i)?.[1] || '').replace(/[.,]+$/, ''),
     address: cleanHtmlText(addressMatch?.[1]),
     description: metaContent(html, 'description'),
@@ -382,7 +397,8 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
       for (const sourceUrl of newLinks) {
         if (shouldStop || matchedCount >= targetCount) break;
         const cachedState = await getCachedMapLeadState(PLATFORM, sourceUrl);
-        if (cachedState?.presentedAt) {
+        const cachedWebsiteNeedsRefresh = Boolean(cachedState?.lead?.website && isWebsiteServiceUrl(cachedState.lead.website));
+        if (cachedState?.presentedAt && !cachedWebsiteNeedsRefresh) {
           candidatesChecked++;
           if (cachedState.presentedAt) {
             duplicatesSkipped++;
