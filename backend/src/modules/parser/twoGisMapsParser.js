@@ -97,6 +97,7 @@ function failsFixedFilters(lead, filters) {
 
 function shouldRefreshCachedLead(cachedState, filters) {
   if (!cachedState?.lead) return false;
+  if (cachedState.lead.platform === PLATFORM) return true;
   if (cachedState.socialScanAt) return false;
   if (filters.socialPlatform !== 'all' && !hasMapLeadSocialPlatform(cachedState.lead, filters.socialPlatform)) {
     return !failsFixedFilters(cachedState.lead, filters);
@@ -272,6 +273,12 @@ function buildTwoGisPageUrl(searchUrl, pageNumber) {
   return url.href;
 }
 
+function buildTwoGisAreaPageUrl(searchUrl, pageNumber, center) {
+  const url = new URL(buildTwoGisPageUrl(searchUrl, pageNumber));
+  if (center) url.searchParams.set('m', `${center.longitude},${center.latitude}/12`);
+  return url.href;
+}
+
 function extractWebsite(hrefs) {
   for (const rawHref of hrefs) {
     const href = decodeHtml(rawHref);
@@ -351,10 +358,13 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
     let cachedRejected = 0;
     let consecutiveEmptyPages = 0;
     let searchHtml = await fetchHtml(buildTwoGisPageUrl(searchUrl, 1));
+    const viewportCenters = buildViewportCenters(extractSearchCenter(searchHtml));
+    let areaIndex = -1;
+    let pageInArea = 1;
 
     for (let pageNumber = 1; matchedCount < targetCount && !shouldStop; pageNumber++) {
-      const pageUrl = buildTwoGisPageUrl(searchUrl, pageNumber);
-      if (pageNumber > 1) {
+      const pageUrl = buildTwoGisAreaPageUrl(searchUrl, pageInArea, viewportCenters[areaIndex]);
+      if (pageNumber > 1 || areaIndex >= 0) {
         searchHtml = await fetchHtml(pageUrl);
       }
       const pageLinks = extractTwoGisFirmLinks(searchHtml);
@@ -372,7 +382,7 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
       for (const sourceUrl of newLinks) {
         if (shouldStop || matchedCount >= targetCount) break;
         const cachedState = await getCachedMapLeadState(PLATFORM, sourceUrl);
-        if (cachedState && !shouldRefreshCachedLead(cachedState, filters)) {
+        if (cachedState?.presentedAt) {
           candidatesChecked++;
           if (cachedState.presentedAt) {
             duplicatesSkipped++;
@@ -440,9 +450,17 @@ export async function startTwoGisMapsParsing({ query, targetCount = 30, filters:
         `Страница ${pageNumber}: проверено карточек ${candidatesChecked}, выдано из памяти ${cachedMatchesReused}, уже показано ${duplicatesSkipped}, не подошло из памяти ${cachedRejected}, подходит ${matchedCount}.`
       );
       if (consecutiveEmptyPages >= 5) {
+        if (areaIndex + 1 < viewportCenters.length) {
+          areaIndex++;
+          pageInArea = 1;
+          consecutiveEmptyPages = 0;
+          emitParserLog(`2ГИС переходит к следующей области карты: ${areaIndex + 1}/${viewportCenters.length}.`);
+          continue;
+        }
         emitParserLog('2ГИС пять страниц подряд не вернул новых компаний — выдача действительно закончилась.', 'warn');
         break;
       }
+      pageInArea++;
     }
 
     emitParserLog(
