@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>LeadHunter Launcher</title>
+  <title>Запуск LeadHunter</title>
   <style>
     :root {
       --bg-main: #0F172A; /* slate-900 */
@@ -216,7 +216,7 @@
     btnRestart.addEventListener('click', async () => {
       try {
         btnRestart.disabled = true;
-        appendLog('\n[System] Перезагрузка CRM (pm2 restart all)...\n');
+        appendLog('\n[Система] Перезагрузка CRM (PM2)...\n');
         await window.api.restartApp();
         setTimeout(() => window.api.openApp(), 2000);
       } catch (e) {
@@ -230,10 +230,10 @@
       btnStop.disabled = true;
       try {
         await window.api.safeStop();
-        appendLog('\n[System] Безопасная остановка завершена.\n');
+        appendLog('\n[Система] Безопасная остановка завершена.\n');
       } catch (err) {
         showError(err);
-        appendLog('\n[Error] Остановка отменена: ' + err + '\n');
+        appendLog('\n[Ошибка] Остановка отменена: ' + err + '\n');
       } finally {
         btnStop.disabled = false;
       }
@@ -243,7 +243,7 @@
       if(confirm('Вы уверены? Принудительное закрытие может прервать важные процессы.')) {
         btnForce.disabled = true;
         await window.api.forceStop();
-        appendLog('\n[System] Все процессы принудительно убиты.\n');
+        appendLog('\n[Система] Все процессы принудительно завершены.\n');
         btnForce.disabled = false;
       }
     });

@@ -1,27 +1,27 @@
 # LeadHunter CRM
 
-Local lead collection and CRM app with parsers for Google Maps, Instagram, and OLX.
+Локальное приложение для сбора лидов и работы с CRM. В проект входят парсеры Telegram, Google Карт и Яндекс Карт.
 
-Source snapshot: [dmitriydrobkin/leadhunter-crm](https://github.com/dmitriydrobkin/leadhunter-crm). This repository keeps attribution to the original project. Verify upstream licensing before commercial redistribution.
+Исходный проект: [dmitriydrobkin/leadhunter-crm](https://github.com/dmitriydrobkin/leadhunter-crm). Перед коммерческим распространением проверьте лицензию исходного проекта.
 
-## Requirements
+## Требования
 
-- Node.js 22+
-- Supabase/PostgreSQL database for full API operation
+- Node.js 22 или новее
+- Supabase/PostgreSQL для полноценной работы API
 
-## Setup
+## Установка
 
 ```powershell
 npm.cmd run install:all
 Copy-Item backend/.env.example backend/.env
-# Edit backend/.env and set your own SUPABASE_DB_URL
+# Укажите собственный SUPABASE_DB_URL в backend/.env
 npm.cmd run dev
 ```
 
-Open <http://localhost:5173>. Backend health check: <http://localhost:3001/api/health>.
+Откройте <http://localhost:5173>. Проверка backend: <http://localhost:3001/api/health>.
 
-Without `SUPABASE_DB_URL`, UI and health check still start, but database-backed routes return HTTP 503.
+Без `SUPABASE_DB_URL` интерфейс работает в ознакомительном режиме с нулевой статистикой. Функции, которым нужна база данных, возвращают HTTP 503.
 
-## Security
+## Безопасность
 
-Never commit `.env`, database files, browser profiles, downloaded data, or messaging sessions. Rotate any credential that was previously committed to another repository.
+Не добавляйте в Git `.env`, базы данных, профили браузера, загруженные данные и сессии мессенджеров. Если секрет раньше попал в репозиторий, замените его.

@@ -27,6 +27,11 @@ import settingsRoutes from './routes/settings.js';
 import campaignsRoutes from './routes/campaigns.js';
 import profilesRoutes from './routes/profiles.js';
 import systemRoutes from './routes/system.js';
+import telegramRoutes from './routes/telegram.js';
+import googleMapsRoutes from './routes/googleMaps.js';
+import yandexMapsRoutes from './routes/yandexMaps.js';
+import twoGisMapsRoutes from './routes/twoGisMaps.js';
+import savedMapLeadsRoutes from './routes/savedMapLeads.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -57,8 +62,13 @@ if (databaseConfigured) {
 // Health check
 app.get('/api/health', (_req, res) => res.json({ ok: true, databaseConfigured, ts: Date.now() }));
 
-app.use('/api', (_req, res, next) => {
-  if (!databaseConfigured) {
+app.use('/api', (req, res, next) => {
+  const worksWithoutDatabase = req.path.startsWith('/telegram')
+    || req.path.startsWith('/google-maps')
+    || req.path.startsWith('/yandex-maps')
+    || req.path.startsWith('/2gis-maps')
+    || req.path.startsWith('/saved-map-leads');
+  if (!databaseConfigured && !worksWithoutDatabase) {
     return res.status(503).json({
       ok: false,
       error: 'Database is not configured. Set SUPABASE_DB_URL in backend/.env.'
@@ -78,6 +88,11 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/campaigns', campaignsRoutes);
 app.use('/api/profiles', profilesRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/telegram', telegramRoutes);
+app.use('/api/google-maps', googleMapsRoutes);
+app.use('/api/yandex-maps', yandexMapsRoutes);
+app.use('/api/2gis-maps', twoGisMapsRoutes);
+app.use('/api/saved-map-leads', savedMapLeadsRoutes);
 
 import { startFollowupManager } from './modules/sender/followupManager.js';
 

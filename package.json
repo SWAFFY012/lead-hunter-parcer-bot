@@ -1,13 +1,16 @@
 {
   "name": "leadhunter",
   "version": "1.0.0",
-  "description": "LeadHunter — automated lead generation & WhatsApp outreach tool",
+  "description": "LeadHunter — сбор лидов, CRM и управление рассылками",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "host:start": "pm2 startOrReload ecosystem.config.cjs --update-env && pm2 save",
+    "host:restart": "pm2 restart ecosystem.config.cjs --update-env && pm2 save",
+    "host:status": "pm2 status",
     "launcher": "electron main.js"
   },
   "devDependencies": {

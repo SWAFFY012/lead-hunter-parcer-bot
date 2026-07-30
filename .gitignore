@@ -57,10 +57,13 @@ logs/
 # Папка с профилями браузера (содержит тяжелые временные файлы Chromium)
 data/browser-profiles/
 data/olx-sessions/
+data/telegram/
 # Кэши загрузок/парсинга и скриншоты
 data/downloads/
 data/tmp/
 data/debug_screenshots/
+data/map-lead-cache.json
+data/map-parser-runs.json
 # Сессии WhatsApp (Baileys)
 backend/sessions/
 backend/backend/sessions/

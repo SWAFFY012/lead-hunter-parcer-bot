@@ -219,7 +219,7 @@ export function Accounts() {
               </div>
 
               <div className="flex gap-2 mt-2">
-                <button className="btn btn-secondary w-full" onClick={() => handleReconnect(acc.id)}>QR-код / Connect</button>
+                <button className="btn btn-secondary w-full" onClick={() => handleReconnect(acc.id)}>QR-код / Подключить</button>
                 <button className="btn btn-ghost w-full" onClick={() => handleDelete(acc.id)}>Удалить</button>
               </div>
             </div>

@@ -122,7 +122,7 @@ export function Profiles() {
           <div className="card text-center py-12">
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>🧬</div>
             <div style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>Нет профилей</div>
-            <div className="text-secondary">Создай первый профиль — система сгенерирует уникальный fingerprint.</div>
+            <div className="text-secondary">Создайте первый профиль — система сгенерирует уникальный цифровой отпечаток.</div>
           </div>
         )}
 
@@ -145,13 +145,13 @@ export function Profiles() {
               {/* Fingerprint details */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px', fontSize: '12px' }}>
                 <div><span className="text-secondary">ОС:</span> <strong>{profile.platform}</strong></div>
-                <div><span className="text-secondary">CPU:</span> <strong>{profile.hardware_concurrency} cores</strong></div>
-                <div><span className="text-secondary">RAM:</span> <strong>{profile.device_memory} GB</strong></div>
+                <div><span className="text-secondary">Процессор:</span> <strong>{profile.hardware_concurrency} ядер</strong></div>
+                <div><span className="text-secondary">Память:</span> <strong>{profile.device_memory} ГБ</strong></div>
                 <div><span className="text-secondary">Экран:</span> <strong>{profile.viewport_width}×{profile.viewport_height}</strong></div>
                 <div><span className="text-secondary">Локаль:</span> <strong>{profile.locale}</strong></div>
                 <div><span className="text-secondary">Таймзона:</span> <strong>{profile.timezone}</strong></div>
                 <div style={{ gridColumn: '1/-1' }}>
-                  <span className="text-secondary">GPU:</span> <strong style={{ wordBreak: 'break-word' }}>{profile.webgl_renderer.replace('ANGLE (', '').replace(')', '')}</strong>
+                  <span className="text-secondary">Графика:</span> <strong style={{ wordBreak: 'break-word' }}>{profile.webgl_renderer.replace('ANGLE (', '').replace(')', '')}</strong>
                 </div>
                 <div style={{ gridColumn: '1/-1' }}>
                   <span className="text-secondary">UA:</span> <span className="mono" style={{ fontSize: '10px', wordBreak: 'break-all', color: 'var(--color-text-tertiary)' }}>{profile.user_agent.replace('Mozilla/5.0 ', '')}</span>
