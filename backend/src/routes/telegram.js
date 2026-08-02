@@ -52,7 +52,8 @@ router.post('/disconnect', async (_req, res) => {
 
 router.get('/search', async (req, res) => {
   try {
-    res.json({ ok: true, chats: await searchTelegramChats(req.query.q, req.query.limit) });
+    const channelsOnly = String(req.query.channelsOnly || '').toLowerCase() === 'true';
+    res.json({ ok: true, chats: await searchTelegramChats(req.query.q, req.query.limit, channelsOnly) });
   } catch (error) {
     sendError(res, error);
   }

@@ -6,6 +6,8 @@ import { StringSession } from 'teleproto/sessions/index.js';
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 const sessionPath = join(moduleDir, '../../../../data/telegram/session.txt');
+const publicTelegramApiId = Number(process.env.TELEGRAM_API_ID || 2040);
+const publicTelegramApiHash = process.env.TELEGRAM_API_HASH || 'b18441a1ed607e10a39fb2740930a677';
 
 let client = null;
 let authPromise = null;
@@ -99,11 +101,12 @@ async function closeClient() {
 }
 
 export async function connectTelegram({ apiId, apiHash, phone }) {
-  const numericApiId = Number(apiId);
+  const numericApiId = Number(apiId || publicTelegramApiId);
+  const resolvedApiHash = String(apiHash || publicTelegramApiHash).trim();
   if (!Number.isInteger(numericApiId) || numericApiId <= 0) {
     throw new Error('API ID должен быть положительным числом.');
   }
-  if (!apiHash?.trim()) throw new Error('Введите API Hash.');
+  if (!resolvedApiHash) throw new Error('Введите API Hash.');
   if (!phone?.trim()) throw new Error('Введите номер телефона в международном формате.');
 
   await closeClient();
@@ -114,7 +117,7 @@ export async function connectTelegram({ apiId, apiHash, phone }) {
   client = new TelegramClient(
     new StringSession(await loadSession()),
     numericApiId,
-    apiHash.trim(),
+    resolvedApiHash,
     { connectionRetries: 5 }
   );
 
@@ -198,20 +201,23 @@ function chatView(chat) {
     id,
     title: chat.title || 'Без названия',
     username: chat.username || '',
+    link: chat.username ? `https://t.me/${chat.username}` : '',
     type: isChannel ? (chat.broadcast ? 'channel' : 'group') : 'group',
     participantsCount: chat.participantsCount || null,
     verified: Boolean(chat.verified),
   };
 }
 
-export async function searchTelegramChats(query, limit = 20) {
+export async function searchTelegramChats(query, limit = 20, channelsOnly = false) {
   const activeClient = requireClient();
   const cleanQuery = String(query || '').trim().replace(/^@/, '');
   if (cleanQuery.length < 2) throw new Error('Введите минимум 2 символа для поиска.');
   const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
   const result = await activeClient.invoke(new Api.contacts.Search({ q: cleanQuery, limit: safeLimit }));
   const chats = result.chats
-    .filter((chat) => ['Chat', 'Channel'].includes(chat.className))
+    .filter((chat) => channelsOnly
+      ? chat.className === 'Channel' && Boolean(chat.broadcast)
+      : ['Chat', 'Channel'].includes(chat.className))
     .map((chat) => {
       const view = chatView(chat);
       entityCache.set(view.id, chat);
