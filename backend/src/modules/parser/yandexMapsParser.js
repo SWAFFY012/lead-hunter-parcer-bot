@@ -132,7 +132,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
 
   try {
     parserBrowser = await playwrightExtra.launch({
-      headless: false,
+      headless: process.env.PARSER_HEADLESS !== 'false',
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--window-size=1366,850'],
     });
     const context = await parserBrowser.newContext({
