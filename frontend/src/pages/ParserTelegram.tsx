@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { saveXlsx } from '../utils/xlsx';
 
 const API = `http://${window.location.hostname}:3001/api/telegram`;
 
@@ -293,10 +294,16 @@ export function ParserTelegram() {
                   ))}
                 </div>
                 {chats.length > 0 && (
-                  <button className="btn btn-secondary" onClick={() => saveCsv(
-                    `telegram-channels-${query.trim() || 'search'}.csv`,
-                    [['Название', 'Юзернейм', 'Ссылка', 'Участников'], ...chats.map((chat) => [chat.title, chat.username ? `@${chat.username}` : '', chat.link, chat.participantsCount || 'Н/Д'])]
-                  )}>Скачать найденные каналы CSV</button>
+                  <div className="maps-action-buttons">
+                    <button className="btn btn-secondary" onClick={() => saveCsv(
+                      `telegram-channels-${query.trim() || 'search'}.csv`,
+                      [['Название', 'Юзернейм', 'Ссылка', 'Участников'], ...chats.map((chat) => [chat.title, chat.username ? `@${chat.username}` : '', chat.link, chat.participantsCount || 'Н/Д'])]
+                    )}>Скачать каналы CSV</button>
+                    <button className="btn btn-secondary" onClick={() => saveXlsx(
+                      `telegram-channels-${query.trim() || 'search'}.xlsx`,
+                      [['Название', 'Юзернейм', 'Ссылка', 'Участников'], ...chats.map((chat) => [chat.title, chat.username ? `@${chat.username}` : '', chat.link, chat.participantsCount || 'Н/Д'])]
+                    )}>Скачать каналы XLSX</button>
+                  </div>
                 )}
               </div>
 
@@ -330,9 +337,14 @@ export function ParserTelegram() {
                   <option value="all">Все сайты</option><option value="with">Есть сайт</option><option value="without">Нет сайта</option>
                 </select>
               </div> : null}
-              <button className="btn btn-secondary" onClick={() => activeTab === 'adverts'
-                ? saveCsv('telegram-adverts.csv', [['Дата', 'Автор', 'Телефоны', 'Telegram', 'Сайты', 'Текст объявления'], ...filteredAdverts.map((advert) => [advert.date, advert.authorName, advert.phones.join(', '), advert.telegramLinks.join(', '), advert.websites.join(', '), advert.text])])
-                : saveCsv('telegram-messages.csv', [['Дата', 'Автор', 'Username', 'Текст', 'Просмотры', 'Пересылки'], ...result.messages.map((message) => [message.date, message.authorName, message.username, message.text, message.views, message.forwards])])}>Скачать CSV</button>
+              <div className="maps-action-buttons">
+                <button className="btn btn-secondary" onClick={() => activeTab === 'adverts'
+                  ? saveCsv('telegram-adverts.csv', [['Дата', 'Автор', 'Телефоны', 'Telegram', 'Сайты', 'Текст объявления'], ...filteredAdverts.map((advert) => [advert.date, advert.authorName, advert.phones.join(', '), advert.telegramLinks.join(', '), advert.websites.join(', '), advert.text])])
+                  : saveCsv('telegram-messages.csv', [['Дата', 'Автор', 'Username', 'Текст', 'Просмотры', 'Пересылки'], ...result.messages.map((message) => [message.date, message.authorName, message.username, message.text, message.views, message.forwards])])}>Скачать CSV</button>
+                <button className="btn btn-secondary" onClick={() => activeTab === 'adverts'
+                  ? saveXlsx('telegram-adverts.xlsx', [['Дата', 'Автор', 'Телефоны', 'Telegram', 'Сайты', 'Текст объявления'], ...filteredAdverts.map((advert) => [advert.date, advert.authorName, advert.phones.join(', '), advert.telegramLinks.join(', '), advert.websites.join(', '), advert.text])])
+                  : saveXlsx('telegram-messages.xlsx', [['Дата', 'Автор', 'Username', 'Текст', 'Просмотры', 'Пересылки'], ...result.messages.map((message) => [message.date, message.authorName, message.username, message.text, message.views, message.forwards])])}>Скачать XLSX</button>
+              </div>
             </div>
             <div className="telegram-table-wrap">
               {activeTab === 'adverts' ? (

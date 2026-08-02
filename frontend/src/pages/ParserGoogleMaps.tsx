@@ -1,6 +1,7 @@
 import React, { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { socket } from '../services/socket';
+import { saveXlsx } from '../utils/xlsx';
 
 interface SocialLink {
   platform: string;
@@ -92,7 +93,18 @@ function companyWord(count: number) {
 }
 
 function downloadCsv(leads: MapLead[], provider: MapsProvider | 'saved') {
-  const rows = [
+  const rows = mapLeadRows(leads);
+  const content = '\uFEFF' + rows.map((row) => row.map(csvCell).join(';')).join('\n');
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${provider}-maps-leads.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function mapLeadRows(leads: MapLead[]) {
+  return [
     ['Название', 'Категория', 'Телефон', 'Сайт', 'Соцсети', 'Рейтинг', 'Адрес', 'Описание', 'Карточка', 'Написал'],
     ...leads.map((lead) => [
       lead.name,
@@ -107,13 +119,10 @@ function downloadCsv(leads: MapLead[], provider: MapsProvider | 'saved') {
       lead.contactedAt ? new Date(lead.contactedAt).toLocaleDateString('ru-RU') : 'Нет',
     ]),
   ];
-  const content = '\uFEFF' + rows.map((row) => row.map(csvCell).join(';')).join('\n');
-  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${provider}-maps-leads.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+}
+
+function downloadXlsx(leads: MapLead[], provider: MapsProvider | 'saved') {
+  return saveXlsx(`${provider}-maps-leads.xlsx`, mapLeadRows(leads));
 }
 
 export function MapsParser({ provider }: { provider: MapsProvider }) {
@@ -467,7 +476,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
             <div><span className="panel-label">РЕЗУЛЬТАТ ПО УСЛОВИЯМ</span><h2>Подходящие компании</h2></div>
             <div className="result-metrics"><span><b>{leads.length}</b> найдено</span><span><b>{progress.checked}</b> проверено</span><span><b>{progress.target || targetCount}</b> цель</span></div>
           </div>
-          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button></div></div>
+          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button><button className="btn btn-secondary" onClick={() => downloadXlsx(leads, provider)} disabled={!leads.length}>Скачать XLSX</button></div></div>
           {savedNotice ? <div className="maps-saved-notice">✓ {savedNotice}</div> : null}
           <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th><th>Написал</th><th>Действия</th></tr></thead><tbody>
             {leads.map((lead) => <tr key={lead.sourceUrl}>
@@ -490,7 +499,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
             <div><span className="panel-label">МОЯ БАЗА ДЛЯ СВЯЗИ</span><h2>Сохранённые компании</h2><p>Контакты останутся здесь после нового поиска и перезапуска.</p></div>
             <div className="saved-count"><b>{savedLeads.length}</b><span>в работе</span></div>
           </div>
-          <div className="maps-result-actions"><span>Можно позвонить или написать позже — список хранится на этом компьютере.</span><div className="maps-action-buttons"><button className="btn btn-secondary" onClick={() => downloadCsv(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать сохранённые</button><button className="btn btn-secondary maps-clear-button" onClick={removeAllSavedCompanies} disabled={!savedLeads.length}>Убрать всё</button></div></div>
+          <div className="maps-result-actions"><span>Можно позвонить или написать позже — список хранится на этом компьютере.</span><div className="maps-action-buttons"><button className="btn btn-secondary" onClick={() => downloadCsv(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать CSV</button><button className="btn btn-secondary" onClick={() => downloadXlsx(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать XLSX</button><button className="btn btn-secondary maps-clear-button" onClick={removeAllSavedCompanies} disabled={!savedLeads.length}>Убрать всё</button></div></div>
           <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Соцсети</th><th>Сайт</th><th>Написал</th><th>Сохранено</th><th></th></tr></thead><tbody>
             {savedLeads.map((lead) => <tr key={`${lead.platform}:${lead.sourceUrl}`}>
               <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.platform === 'yandex_maps' ? 'Яндекс Карты' : lead.platform === 'two_gis_maps' ? '2ГИС' : 'Google Карты'} · {lead.address || 'Адрес не указан'}</small></td>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { saveXlsx } from '../utils/xlsx';
 
 interface Lead {
   id: number;
@@ -195,6 +196,20 @@ export function Leads() {
     window.location.href = '/api/leads/export/csv';
   };
 
+  const handleExportXlsx = () => saveXlsx('crm-leads.xlsx', [
+    ['Имя', 'Телефон', 'Должность', 'Статус', 'Город', 'Сайт', 'Аккаунт', 'Дата'],
+    ...leads.map((lead) => [
+      lead.name,
+      lead.phone,
+      lead.title,
+      STATUS_LABELS[lead.status] || lead.status,
+      lead.city,
+      lead.website,
+      lead.assigned_account,
+      lead.created_at ? new Date(lead.created_at).toLocaleString('ru-RU') : '',
+    ]),
+  ]);
+
   return (
     <div className="flex flex-col h-full">
       {/* Page Header */}
@@ -205,6 +220,7 @@ export function Leads() {
         </div>
         <div className="flex gap-2">
           <button className="btn btn-secondary" onClick={handleExportCsv}>📥 Экспорт CSV</button>
+          <button className="btn btn-secondary" onClick={handleExportXlsx} disabled={!leads.length}>📥 Экспорт XLSX</button>
           <button className="btn btn-primary">Новая кампания</button>
         </div>
       </div>
