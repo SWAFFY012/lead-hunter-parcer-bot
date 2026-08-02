@@ -56,7 +56,7 @@ export function Dashboard() {
   useEffect(() => {
     const loadDashboard = async () => {
       try {
-        const baseUrl = `http://${window.location.hostname}:3001`;
+        const baseUrl = '';
         const healthResponse = await fetch(`${baseUrl}/api/health`);
         if (!healthResponse.ok) throw new Error(`Сервер вернул HTTP ${healthResponse.status}`);
 

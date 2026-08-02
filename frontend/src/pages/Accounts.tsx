@@ -52,7 +52,7 @@ export function Accounts() {
 
   const fetchAccounts = async () => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/accounts`);
+      const res = await fetch(`/api/accounts`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setAccounts(data);
@@ -67,7 +67,7 @@ export function Accounts() {
     setLoading(true);
     setQrCodeData(null);
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/accounts`, {
+      const res = await fetch(`/api/accounts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: newAccId })
@@ -99,7 +99,7 @@ export function Accounts() {
   const handleDelete = async (id: string) => {
     if (!confirm(`Удалить аккаунт ${id}?`)) return;
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/accounts/${id}`, { method: 'DELETE' });
+      await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
       setAccounts(prev => prev.filter(acc => acc.id !== id));
     } catch (err) {
       console.error('Delete error:', err);
@@ -110,7 +110,7 @@ export function Accounts() {
     setQrCodeData(null);
     setIsModalOpen(true);
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/accounts/${id}/reconnect`, { method: 'POST' });
+      await fetch(`/api/accounts/${id}/reconnect`, { method: 'POST' });
     } catch (err) {
       console.error('Reconnect error:', err);
     }
@@ -121,7 +121,7 @@ export function Accounts() {
       acc.id === id ? { ...acc, [field]: value ? 1 : 0 } : acc
     ));
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/accounts/${id}/permissions`, {
+      await fetch(`/api/accounts/${id}/permissions`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value })

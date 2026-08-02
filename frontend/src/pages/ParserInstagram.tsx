@@ -62,7 +62,7 @@ export function ParserInstagram() {
   }, [url, pages, filterGeo, filterActive, minFollowers, maxFollowers, maxPostDays, takeScreenshots, selectedProfileId, selectedCampaignId]);
 
   const fetchTasks = () => {
-    fetch(`http://${window.location.hostname}:3001/api/parser/tasks`)
+    fetch(`/api/parser/tasks`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setTasks(data.filter((t: any) => t.platform === 'instagram')); })
       .catch(console.error);
@@ -73,7 +73,7 @@ export function ParserInstagram() {
   }, []);
 
   useEffect(() => {
-    fetch(`http://${window.location.hostname}:3001/api/campaigns`)
+    fetch(`/api/campaigns`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setCampaigns(data); })
       .catch(console.error);
@@ -84,7 +84,7 @@ export function ParserInstagram() {
       setIsSessionActive(null);
       return;
     }
-    fetch(`http://${window.location.hostname}:3001/api/parser/instagram/check-session/${selectedProfileId}`)
+    fetch(`/api/parser/instagram/check-session/${selectedProfileId}`)
       .then(r => r.json())
       .then(data => setIsSessionActive(data.active))
       .catch(() => setIsSessionActive(false));
@@ -130,7 +130,7 @@ export function ParserInstagram() {
     socket.on('parser:log', handleLog);
     socket.on('parser:done', handleDone);
 
-    fetch(`http://${window.location.hostname}:3001/api/parser/status`)
+    fetch(`/api/parser/status`)
       .then(r => r.json())
       .then(res => {
         if (res.isRunning && res.platform === platform) {
@@ -149,7 +149,7 @@ export function ParserInstagram() {
   }, []);
 
   useEffect(() => {
-    fetch(`http://${window.location.hostname}:3001/api/profiles`)
+    fetch(`/api/profiles`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setProfiles(data); })
       .catch(console.error);
@@ -157,7 +157,7 @@ export function ParserInstagram() {
 
   const handleStart = async () => {
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/start`, {
+      await fetch(`/api/parser/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -199,7 +199,7 @@ export function ParserInstagram() {
     } catch(e) {}
     
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/start`, {
+      await fetch(`/api/parser/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -221,14 +221,14 @@ export function ParserInstagram() {
   const handleDeleteTask = async (taskId: number) => {
     if (!window.confirm('Удалить задачу из истории?')) return;
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/tasks/${taskId}`, { method: 'DELETE' });
+      await fetch(`/api/parser/tasks/${taskId}`, { method: 'DELETE' });
       fetchTasks();
     } catch (err) { console.error(err); }
   };
 
   const handleStop = async () => {
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/stop`, { 
+      await fetch(`/api/parser/stop`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platform })
@@ -245,7 +245,7 @@ export function ParserInstagram() {
       return;
     }
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/instagram-login`, {
+      await fetch(`/api/parser/instagram-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profileId: selectedProfileId })

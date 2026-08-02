@@ -21,7 +21,7 @@ export function AIMessages() {
 
   const fetchPrompts = async () => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/ai/prompts`);
+      const res = await fetch(`/api/ai/prompts`);
       const data = await res.json();
       setPrompts(data);
       if (data.length > 0 && !selectedPrompt) {
@@ -63,8 +63,8 @@ export function AIMessages() {
       };
 
       const url = selectedPrompt 
-        ? `http://${window.location.hostname}:3001/api/ai/prompts/${selectedPrompt.id}`
-        : `http://${window.location.hostname}:3001/api/ai/prompts`;
+        ? `/api/ai/prompts/${selectedPrompt.id}`
+        : `/api/ai/prompts`;
       const method = selectedPrompt ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -93,7 +93,7 @@ export function AIMessages() {
     if (!confirm('Удалить этот промпт?')) return;
     
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/ai/prompts/${selectedPrompt.id}`, { method: 'DELETE' });
+      await fetch(`/api/ai/prompts/${selectedPrompt.id}`, { method: 'DELETE' });
       setSelectedPrompt(null);
       await fetchPrompts();
     } catch (err) {

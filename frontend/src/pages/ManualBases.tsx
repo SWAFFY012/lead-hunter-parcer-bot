@@ -87,14 +87,14 @@ export function ManualBases() {
 
   const fetchPrompts = async () => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/ai/prompts`);
+      const res = await fetch(`/api/ai/prompts`);
       if (res.ok) setPrompts(await res.json());
     } catch (err) { console.error(err); }
   };
 
   const fetchBases = async () => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/campaigns`);
+      const res = await fetch(`/api/campaigns`);
       if (res.ok) {
         const data: Campaign[] = await res.json();
         setBases(data.filter(c => c.name.startsWith('(+)')));
@@ -109,7 +109,7 @@ export function ManualBases() {
   const fetchLeads = async (campaignId: number) => {
     setLeadsLoading(true);
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/leads?campaign_id=${campaignId}`);
+      const res = await fetch(`/api/leads?campaign_id=${campaignId}`);
       if (res.ok) {
         const data = await res.json();
         setLeads(data.leads || []);
@@ -130,7 +130,7 @@ export function ManualBases() {
     if (!newBaseName.trim()) return;
     setCreating(true);
     try {
-      const response = await fetch(`http://${window.location.hostname}:3001/api/campaigns`, {
+      const response = await fetch(`/api/campaigns`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newBaseName.trim(), source_url: newBaseUrl.trim(), is_manual: true })
@@ -192,7 +192,7 @@ export function ManualBases() {
   const handleDelete = async (id: number) => {
     if (!confirm('Вы уверены, что хотите удалить эту базу? Все лиды внутри нее будут удалены!')) return;
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/campaigns/${id}`, { method: 'DELETE' });
+      await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
       setBases(bases.filter(b => b.id !== id));
       if (selectedBase?.id === id) setSelectedBase(null);
     } catch (err) {
@@ -202,7 +202,7 @@ export function ManualBases() {
 
   const handleStatusChange = async (leadId: number, newStatus: string) => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/leads/${leadId}`, {
+      const res = await fetch(`/api/leads/${leadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -221,7 +221,7 @@ export function ManualBases() {
   const handleDeleteLead = async (leadId: number) => {
     if (!confirm('Удалить лид?')) return;
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/leads/${leadId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/leads/${leadId}`, { method: 'DELETE' });
       if (res.ok) {
         setLeads(leads.filter(l => l.id !== leadId));
       }
@@ -306,7 +306,7 @@ export function ManualBases() {
         return next;
       });
 
-      const res = await fetch(`http://${window.location.hostname}:3001/api/ai/generate`, {
+      const res = await fetch(`/api/ai/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leadIds: Array.from(selectedLeads), promptId: selectedPromptId })
@@ -341,7 +341,7 @@ export function ManualBases() {
     if (newText === undefined) return;
     
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/ai/update-lead-message`, {
+      const res = await fetch(`/api/ai/update-lead-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leadId: id, ai_message: newText })
@@ -360,7 +360,7 @@ export function ManualBases() {
 
   const handleApproveMessage = async (id: number) => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/ai/update-lead-message`, {
+      const res = await fetch(`/api/ai/update-lead-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leadId: id, status: 'ready_to_send' })
@@ -382,7 +382,7 @@ export function ManualBases() {
 
   const handleUnapproveMessage = async (id: number) => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/ai/update-lead-message`, {
+      const res = await fetch(`/api/ai/update-lead-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leadId: id, status: 'new' })
@@ -400,7 +400,7 @@ export function ManualBases() {
     try {
       await Promise.all(
         Array.from(selectedLeads).map(id =>
-          fetch(`http://${window.location.hostname}:3001/api/ai/update-lead-message`, {
+          fetch(`/api/ai/update-lead-message`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ leadId: id, status: 'ready_to_send' })
@@ -535,7 +535,7 @@ export function ManualBases() {
                           setSelectedPromptId(newPromptId);
                           if (selectedBase) {
                             try {
-                              await fetch(`http://${window.location.hostname}:3001/api/campaigns/${selectedBase.id}`, {
+                              await fetch(`/api/campaigns/${selectedBase.id}`, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ prompt_id: newPromptId || null })

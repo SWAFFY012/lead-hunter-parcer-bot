@@ -66,7 +66,7 @@ export function Leads() {
     if (!selectedLead || generatingReply) return;
     setGeneratingReply(true);
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/leads/${selectedLead.id}/generate_reply`, {
+      const res = await fetch(`/api/leads/${selectedLead.id}/generate_reply`, {
         method: 'POST'
       });
       if (res.ok) {
@@ -88,7 +88,7 @@ export function Leads() {
     if (!selectedLead || !replyText.trim() || sendingReply) return;
     setSendingReply(true);
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/leads/${selectedLead.id}/reply`, {
+      const res = await fetch(`/api/leads/${selectedLead.id}/reply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: replyText.trim() })
@@ -121,7 +121,7 @@ export function Leads() {
       if (statusFilter) qs.append('status', statusFilter);
       qs.append('limit', '100'); // Fetch up to 100 recent
 
-      const res = await fetch(`http://${window.location.hostname}:3001/api/leads?${qs.toString()}`);
+      const res = await fetch(`/api/leads?${qs.toString()}`);
       const data = await res.json();
       setLeads(data.leads || []);
     } catch (err) {
@@ -140,7 +140,7 @@ export function Leads() {
     setSelectedLead(lead);
     try {
       // Fetch full lead data including messages
-      const res = await fetch(`http://${window.location.hostname}:3001/api/leads/${lead.id}`);
+      const res = await fetch(`/api/leads/${lead.id}`);
       if (res.ok) {
         const fullLead = await res.json();
         setSelectedLead(fullLead);
@@ -158,7 +158,7 @@ export function Leads() {
   const handleMessageBlur = async () => {
     if (editingMessage === null || !selectedLead) return;
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/ai/update-lead-message`, {
+      const res = await fetch(`/api/ai/update-lead-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leadId: selectedLead.id, ai_message: editingMessage })
@@ -177,7 +177,7 @@ export function Leads() {
   const handleStatusChange = async (newStatus: string) => {
     if (!selectedLead) return;
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/leads/${selectedLead.id}`, {
+      const res = await fetch(`/api/leads/${selectedLead.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })

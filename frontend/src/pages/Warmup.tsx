@@ -59,7 +59,7 @@ export function Warmup() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/warmup/logs?limit=50`);
+      const res = await fetch(`/api/warmup/logs?limit=50`);
       const data = await res.json();
       if (Array.isArray(data)) {
         const history: Log[] = data.reverse().map((l: any) => ({
@@ -75,7 +75,7 @@ export function Warmup() {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/warmup/status`);
+      const res = await fetch(`/api/warmup/status`);
       const data = await res.json();
       setIsRunning(data.running);
     } catch (e) {}
@@ -83,7 +83,7 @@ export function Warmup() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/settings`);
+      const res = await fetch(`/api/settings`);
       const data = await res.json();
       if (data.warmup_min_delay_sec) setMinDelay(Number(data.warmup_min_delay_sec));
       if (data.warmup_max_delay_sec) setMaxDelay(Number(data.warmup_max_delay_sec));
@@ -92,7 +92,7 @@ export function Warmup() {
 
   const saveSettings = async () => {
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/settings`, {
+      await fetch(`/api/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -107,7 +107,7 @@ export function Warmup() {
   const toggleWarmup = async () => {
     const endpoint = isRunning ? 'stop' : 'start';
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/warmup/${endpoint}`, { method: 'POST' });
+      await fetch(`/api/warmup/${endpoint}`, { method: 'POST' });
       setIsRunning(!isRunning);
     } catch (e) {}
   };

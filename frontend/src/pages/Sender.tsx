@@ -107,7 +107,7 @@ export function Sender() {
 
   useEffect(() => {
     let isMounted = true;
-    const apiBase = `http://${window.location.hostname}:3001/api`;
+    const apiBase = `/api`;
 
     const loadInitialData = async () => {
       fetchJson(`${apiBase}/saved-map-leads/outreach`)
@@ -220,7 +220,7 @@ export function Sender() {
   const startSending = async () => {
     try {
       // Save settings first
-      await fetch(`http://${window.location.hostname}:3001/api/settings`, {
+      await fetch(`/api/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -230,7 +230,7 @@ export function Sender() {
       });
 
       // Start sending
-      const res = await fetch(`http://${window.location.hostname}:3001/api/sender/start`, {
+      const res = await fetch(`/api/sender/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -250,7 +250,7 @@ export function Sender() {
 
   const pauseSending = async () => {
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/sender/pause`, { method: 'POST' });
+      await fetch(`/api/sender/pause`, { method: 'POST' });
     } catch (err) {
       console.error(err);
     }
@@ -259,7 +259,7 @@ export function Sender() {
   const generateOutreachDrafts = async () => {
     setGeneratingDrafts(true);
     try {
-      const response = await fetch(`http://${window.location.hostname}:3001/api/saved-map-leads/outreach/generate-drafts`, { method: 'POST' });
+      const response = await fetch(`/api/saved-map-leads/outreach/generate-drafts`, { method: 'POST' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не удалось подготовить сообщения.');
       setOutreachLeads(data.leads || []);
@@ -275,7 +275,7 @@ export function Sender() {
 
   const updateOutreachDraft = async (lead: OutreachLead, outreachDraft: string) => {
     setOutreachLeads((current) => current.map((item) => item.sourceUrl === lead.sourceUrl && item.platform === lead.platform ? { ...item, outreachDraft } : item));
-    await fetch(`http://${window.location.hostname}:3001/api/saved-map-leads/outreach/draft`, {
+    await fetch(`/api/saved-map-leads/outreach/draft`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ platform: lead.platform, sourceUrl: lead.sourceUrl, outreachDraft }),
@@ -283,7 +283,7 @@ export function Sender() {
   };
 
   const removeOutreachLead = async (lead: OutreachLead) => {
-    const response = await fetch(`http://${window.location.hostname}:3001/api/saved-map-leads/outreach`, {
+    const response = await fetch(`/api/saved-map-leads/outreach`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ platform: lead.platform, sourceUrl: lead.sourceUrl }),

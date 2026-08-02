@@ -31,7 +31,7 @@ export function SystemLogs() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/system/logs`);
+      const res = await fetch(`/api/system/logs`);
       const data = await res.json();
       setLogs(data);
     } catch (err) {
@@ -44,7 +44,7 @@ export function SystemLogs() {
   const clearLogs = async () => {
     if (!confirm('Вы уверены, что хотите очистить весь журнал ошибок?')) return;
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/system/logs`, { method: 'DELETE' });
+      await fetch(`/api/system/logs`, { method: 'DELETE' });
       setLogs([]);
     } catch (err) {
       alert('Ошибка при очистке журнала');

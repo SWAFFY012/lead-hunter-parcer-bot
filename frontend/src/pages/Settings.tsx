@@ -24,7 +24,7 @@ export function Settings() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`http://${window.location.hostname}:3001/api/settings`)
+    fetch(`/api/settings`)
       .then(res => res.json())
       .then(data => {
         if (data.safe_mode !== undefined) setSafeMode(data.safe_mode === 'true');
@@ -66,7 +66,7 @@ export function Settings() {
     }
 
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/settings`, {
+      await fetch(`/api/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

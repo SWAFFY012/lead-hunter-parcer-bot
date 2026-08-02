@@ -128,8 +128,8 @@ function downloadXlsx(leads: MapLead[], provider: MapsProvider | 'saved') {
 export function MapsParser({ provider }: { provider: MapsProvider }) {
   const navigate = useNavigate();
   const config = providerConfig[provider];
-  const api = `http://${window.location.hostname}:3001/api/${config.endpoint}`;
-  const savedApi = `http://${window.location.hostname}:3001/api/saved-map-leads`;
+  const api = `/api/${config.endpoint}`;
+  const savedApi = `/api/saved-map-leads`;
   const [query, setQuery] = useState(() => localStorage.getItem(`${config.storage}_query`) || '');
   const [targetCount, setTargetCount] = useState(() => {
     const savedTarget = Number(localStorage.getItem(`${config.storage}_target_v2`));

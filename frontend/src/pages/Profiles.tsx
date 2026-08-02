@@ -29,7 +29,7 @@ export function Profiles() {
 
   const loadProfiles = async () => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/profiles`);
+      const res = await fetch(`/api/profiles`);
       const data = await res.json();
       setProfiles(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -44,7 +44,7 @@ export function Profiles() {
   const handleCreate = async () => {
     setCreating(true);
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/profiles`, {
+      const res = await fetch(`/api/profiles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName || undefined }),
@@ -62,7 +62,7 @@ export function Profiles() {
   const handleDelete = async (id: string) => {
     if (!confirm('Удалить профиль?')) return;
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/profiles/` + id, { method: 'DELETE' });
+      await fetch(`/api/profiles/` + id, { method: 'DELETE' });
       setProfiles(prev => prev.filter(p => p.id !== id));
     } catch (err) {
       console.error(err);
@@ -71,7 +71,7 @@ export function Profiles() {
 
   const handleSaveProxy = async (id: string) => {
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/profiles/` + id + '/proxy', {
+      await fetch(`/api/profiles/` + id + '/proxy', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proxy: proxyValue || null }),

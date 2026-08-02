@@ -22,7 +22,7 @@ export function Pipeline() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`http://${window.location.hostname}:3001/api/leads?limit=1000`)
+    fetch(`/api/leads?limit=1000`)
       .then(r => r.json())
       .then(data => {
         // Filter out only pipeline-relevant leads
@@ -52,7 +52,7 @@ export function Pipeline() {
 
     // Persist
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/leads/${leadId}`, {
+      await fetch(`/api/leads/${leadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })

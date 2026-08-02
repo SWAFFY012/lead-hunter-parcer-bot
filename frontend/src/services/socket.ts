@@ -1,8 +1,9 @@
 import { io } from 'socket.io-client';
 
-// Connect to the socket.io server.
-// With Vite proxy configured for /socket.io, this will automatically route to localhost:3001
-export const socket = io(`http://${window.location.hostname}:3001`, {
+// Connect to the socket.io server on the same origin.
+// Vite dev proxy routes /socket.io to localhost:3001 locally;
+// in production nginx proxies /socket.io to the backend.
+export const socket = io({
   autoConnect: true,
   reconnection: true
 });

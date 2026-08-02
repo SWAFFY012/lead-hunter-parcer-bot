@@ -2,7 +2,7 @@ import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { saveXlsx } from '../utils/xlsx';
 
-const API = `http://${window.location.hostname}:3001/api/telegram`;
+const API = `/api/telegram`;
 
 type AuthState = 'disconnected' | 'connecting' | 'code_required' | 'password_required' | 'verifying' | 'connected' | 'error';
 

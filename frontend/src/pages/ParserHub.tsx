@@ -35,7 +35,7 @@ export function ParserHub() {
 
   useEffect(() => {
     let active = true;
-    const apiBase = `http://${window.location.hostname}:3001/api`;
+    const apiBase = `/api`;
     const updateStatuses = async () => {
       const statuses = await Promise.all(mapParsers.map(async (parser) => {
         try {

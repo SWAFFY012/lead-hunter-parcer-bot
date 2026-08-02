@@ -74,7 +74,7 @@ export function ParserOlx() {
     socket.on('parser:auth', handleAuth);
 
     // Initial status check
-    fetch(`http://${window.location.hostname}:3001/api/parser/status`)
+    fetch(`/api/parser/status`)
       .then(r => r.json())
       .then(res => {
         if (res.isRunning) {
@@ -95,7 +95,7 @@ export function ParserOlx() {
 
   // Load profiles
   useEffect(() => {
-    fetch(`http://${window.location.hostname}:3001/api/profiles`)
+    fetch(`/api/profiles`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setProfiles(data); })
       .catch(console.error);
@@ -109,7 +109,7 @@ export function ParserOlx() {
         return;
       }
       
-      await fetch(`http://${window.location.hostname}:3001/api/parser/start`, {
+      await fetch(`/api/parser/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: cleanUrl, pages, profile_id: selectedProfileId || undefined, platform })
@@ -121,7 +121,7 @@ export function ParserOlx() {
 
   const handleStop = async () => {
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/stop`, { 
+      await fetch(`/api/parser/stop`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platform })
@@ -134,7 +134,7 @@ export function ParserOlx() {
 
   const handleAuthOlx = async () => {
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/auth-olx`, {
+      await fetch(`/api/parser/auth-olx`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profileId: selectedProfileId || undefined })
@@ -147,7 +147,7 @@ export function ParserOlx() {
 
   const handleAuthConfirm = async () => {
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/auth-olx-confirm`, {
+      await fetch(`/api/parser/auth-olx-confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profileId: selectedProfileId || undefined })
@@ -160,7 +160,7 @@ export function ParserOlx() {
 
   const handleAuthCancel = async () => {
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/parser/auth-olx-cancel`, {
+      await fetch(`/api/parser/auth-olx-cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profileId: selectedProfileId || undefined })
@@ -174,7 +174,7 @@ export function ParserOlx() {
   const handleOpenCookieModal = async () => {
     try {
       const q = selectedProfileId ? `?profileId=${selectedProfileId}` : '';
-      const res = await fetch(`http://${window.location.hostname}:3001/api/parser/cookies${q}`);
+      const res = await fetch(`/api/parser/cookies${q}`);
       if (res.ok) {
         const cookies = await res.json();
         if (cookies && cookies.length > 0) {
@@ -199,7 +199,7 @@ export function ParserOlx() {
         return;
       }
       
-      const res = await fetch(`http://${window.location.hostname}:3001/api/parser/import-cookies`, {
+      const res = await fetch(`/api/parser/import-cookies`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profileId: selectedProfileId || undefined, cookies, userAgent })

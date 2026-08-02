@@ -6,7 +6,7 @@ export const GlobalAITracker = () => {
 
   useEffect(() => {
     // Initial fetch to check if generation is already running
-    fetch(`http://${window.location.hostname}:3001/api/ai/status`)
+    fetch(`/api/ai/status`)
       .then(res => res.json())
       .then(data => {
         if (data && data.active) {
