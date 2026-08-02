@@ -31,7 +31,7 @@ function sleep(min, max) {
 
 async function openCleanYandexSearch(page, query) {
   const words = query.trim().split(/\s+/);
-  const queryVariants = [query];
+  let queryVariants = [query];
   if (words.length >= 3) {
     const city = words[0];
     const service = words.slice(1).join(' ');
@@ -39,7 +39,7 @@ async function openCleanYandexSearch(page, query) {
       .replace(/ремонт\s+(?:кровли|крыши)/i, 'кровельные работы')
       .replace(/починить\s+(?:кровлю|крышу)/i, 'кровельные работы');
     if (categoryService !== service) {
-      queryVariants.push(`${city} ${categoryService}`, `${categoryService}, ${city}`);
+      queryVariants = [`${city} ${categoryService}`, `${categoryService}, ${city}`, query];
     }
     queryVariants.push(`${service}, ${city}`);
   }
@@ -173,9 +173,11 @@ async function extractCard(page) {
   });
 }
 
-export async function startYandexMapsParsing({ query, targetCount = 30, filters: rawFilters = {} }) {
+export async function startYandexMapsParsing({ query, targetCount = 30 }) {
   if (parserRunning) return { success: false, error: 'Парсер Яндекс Карт уже запущен.' };
-  const filters = normalizeMapLeadFilters(rawFilters);
+  // Yandex Maps now collects every card in the result. Old filter values can
+  // remain in browser localStorage, so deliberately ignore them server-side.
+  const filters = normalizeMapLeadFilters();
   parserRunning = true;
   shouldStop = false;
   startMapParserRun(PLATFORM, { query, targetCount, filters });
@@ -221,7 +223,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
     let candidatesChecked = 0;
     let duplicatesSkipped = 0;
     let consecutiveEmptyPages = 0;
-    io.emit('parser:log', { platform: 'yandex_maps', message: `Ищем ${targetCount} компаний, подходящих под выбранные фильтры.`, type: 'info' });
+    io.emit('parser:log', { platform: 'yandex_maps', message: `Собираем ${targetCount} компаний подряд, без фильтрации.`, type: 'info' });
 
     for (let pageIndex = 0; matchedCount < targetCount; pageIndex++) {
       if (shouldStop) break;

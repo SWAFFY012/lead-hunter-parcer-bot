@@ -16,7 +16,7 @@ router.post('/start', (req, res) => {
   }
   const query = String(req.body?.query || '').trim();
   const targetCount = Math.min(100, Math.max(1, Number(req.body?.targetCount) || 30));
-  const filters = normalizeMapLeadFilters(req.body?.filters);
+  const filters = normalizeMapLeadFilters();
   if (query.length < 3) {
     return res.status(400).json({ ok: false, error: 'Введите город и нишу для поиска.' });
   }
