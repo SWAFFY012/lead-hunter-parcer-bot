@@ -29,6 +29,58 @@ function sleep(min, max) {
   return new Promise((resolve) => setTimeout(resolve, delay));
 }
 
+async function openCleanYandexSearch(page, query) {
+  const words = query.trim().split(/\s+/);
+  const queryVariants = [query];
+  if (words.length >= 3) {
+    const city = words[0];
+    const service = words.slice(1).join(' ');
+    const categoryService = service
+      .replace(/ремонт\s+(?:кровли|крыши)/i, 'кровельные работы')
+      .replace(/починить\s+(?:кровлю|крышу)/i, 'кровельные работы');
+    if (categoryService !== service) {
+      queryVariants.push(`${city} ${categoryService}`, `${categoryService}, ${city}`);
+    }
+    queryVariants.push(`${service}, ${city}`);
+  }
+  const searchUrls = [...new Set(queryVariants)].map((searchQuery) => (
+    `https://yandex.ru/maps/?mode=search&text=${encodeURIComponent(searchQuery)}`
+  ));
+  const hasCategoryAlias = queryVariants.length > 2;
+
+  for (const [searchIndex, searchUrl] of searchUrls.entries()) {
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await page.getByRole('button', { name: /Разрешить все|Принять все|Согласен/i })
+      .first().click({ timeout: 2500 }).catch(() => {});
+    const organizations = page.locator('a[href*="/maps/org/"]');
+    await organizations.first().waitFor({ state: 'attached', timeout: 8000 }).catch(() => {});
+    if (await organizations.count()) return true;
+
+    const resetFilters = page.getByText(/сбросить фильтры/i).first();
+    if (await resetFilters.isVisible().catch(() => false)) {
+      await resetFilters.click({ timeout: 5000 }).catch(() => {});
+      await organizations.first().waitFor({ state: 'attached', timeout: 8000 }).catch(() => {});
+      if (await organizations.count()) return true;
+    }
+
+    // Yandex can move the map to the requested city but treat the full phrase
+    // as an organization name. Keep the resulting viewport and search the
+    // service part separately inside that city.
+    if (searchIndex === 0 && words.length >= 3 && !hasCategoryAlias) {
+      const serviceQuery = words.slice(1).join(' ');
+      const searchInput = page.locator('input[placeholder*="Поиск"], input[aria-label*="Поиск"]').first();
+      if (await searchInput.isVisible().catch(() => false)) {
+        await searchInput.fill(serviceQuery);
+        await searchInput.press('Enter');
+        await organizations.first().waitFor({ state: 'attached', timeout: 12_000 }).catch(() => {});
+        if (await organizations.count()) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 async function collectOrganizationLinks(page) {
   return page.locator('a[href*="/maps/org/"]')
     .evaluateAll((links) => [...new Set(links.map((link) => {
@@ -147,11 +199,11 @@ export async function startYandexMapsParsing({ query, targetCount = 30, filters:
       else route.continue();
     });
 
-    const searchUrl = `https://yandex.ru/maps/?text=${encodeURIComponent(query)}`;
     io.emit('parser:log', { platform: 'yandex_maps', message: `Открываем Яндекс Карты: ${query}`, type: 'info' });
-    await searchPage.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    await searchPage.getByRole('button', { name: /Разрешить все|Принять все|Согласен/i }).first().click({ timeout: 2500 }).catch(() => {});
-    await searchPage.waitForSelector('a[href*="/maps/org/"]', { timeout: 20_000 });
+    const hasResults = await openCleanYandexSearch(searchPage, query);
+    if (!hasResults) {
+      throw new Error(`Яндекс Карты не вернули компании по запросу «${query}» даже после автоматического сброса фильтров.`);
+    }
 
     const firstResultsUrl = searchPage.url();
     const paginationUrls = await searchPage.locator('a[href*="/search/"][href*="page="]')
