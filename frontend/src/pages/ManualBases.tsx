@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { socket } from '../services/socket';
+import { saveXlsx } from '../utils/xlsx';
 
 interface Campaign {
   id: number;
@@ -258,6 +259,21 @@ export function ManualBases() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const exportXLSX = () => {
+    if (leads.length === 0) return alert('Нет лидов для экспорта');
+    return saveXlsx(`${selectedBase?.name || 'leads'}.xlsx`, [
+      ['Имя', 'Телефон', 'Заголовок', 'Ссылка', 'Описание', 'Дата'],
+      ...leads.map((lead) => [
+        lead.name || '',
+        lead.phone || '',
+        lead.title || '',
+        lead.source_url || '',
+        lead.ad_text || '',
+        lead.created_at ? new Date(lead.created_at).toLocaleString('ru-RU') : '',
+      ]),
+    ]);
   };
 
   const toggleLeadSelection = (id: number) => {
@@ -551,6 +567,7 @@ export function ManualBases() {
                   <div className="flex gap-2 items-center">
                     <button className="btn btn-secondary" onClick={() => fetchLeads(selectedBase.id)}>Обновить</button>
                     <button className="btn btn-secondary" onClick={exportCSV}>Экспорт CSV</button>
+                    <button className="btn btn-secondary" onClick={exportXLSX}>Экспорт XLSX</button>
                     <button 
                       className="btn btn-secondary"
                       disabled={selectedLeads.size === 0}
