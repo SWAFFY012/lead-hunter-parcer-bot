@@ -24,6 +24,7 @@ interface TelegramChat {
   id: string;
   title: string;
   username: string;
+  link: string;
   type: 'group' | 'channel';
   participantsCount: number | null;
   verified: boolean;
@@ -170,7 +171,7 @@ export function ParserTelegram() {
 
   const searchChats = async (event: FormEvent) => {
     event.preventDefault();
-    const data = await run('search', () => apiRequest<{ chats: TelegramChat[] }>(`/search?q=${encodeURIComponent(query)}&limit=30`));
+    const data = await run('search', () => apiRequest<{ chats: TelegramChat[] }>(`/search?q=${encodeURIComponent(query)}&limit=30&channelsOnly=true`));
     if (data) {
       setChats(data.chats);
       setSelectedChat(null);
@@ -245,11 +246,11 @@ export function ParserTelegram() {
                 </form>
               ) : (
                 <form onSubmit={connect}>
-                  <h2>Данные приложения Telegram</h2>
-                  <p className="panel-help">Получите API ID и API Hash на <a href="https://my.telegram.org" target="_blank" rel="noreferrer">my.telegram.org</a>. Данные не сохраняются в браузере.</p>
+                  <h2>Подключение через публичный Telegram API</h2>
+                  <p className="panel-help">По умолчанию используются публичные параметры Telegram Desktop. Укажите свои API ID и API Hash только если хотите заменить их данными с <a href="https://my.telegram.org" target="_blank" rel="noreferrer">my.telegram.org</a>.</p>
                   <div className="telegram-form-row">
-                    <div><label>API ID</label><input type="number" className="form-input" value={apiId} onChange={(event) => setApiId(event.target.value)} placeholder="12345678" /></div>
-                    <div><label>API Hash</label><input type="password" className="form-input" value={apiHash} onChange={(event) => setApiHash(event.target.value)} placeholder="32 символа" /></div>
+                    <div><label>Свой API ID <small>(необязательно)</small></label><input type="number" className="form-input" value={apiId} onChange={(event) => setApiId(event.target.value)} placeholder="Использовать публичный" /></div>
+                    <div><label>Свой API Hash <small>(необязательно)</small></label><input type="password" className="form-input" value={apiHash} onChange={(event) => setApiHash(event.target.value)} placeholder="Использовать публичный" /></div>
                   </div>
                   <label>Номер телефона</label>
                   <input className="form-input" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+79991234567" />
@@ -275,14 +276,14 @@ export function ParserTelegram() {
 
             <section className="telegram-workspace">
               <div className="telegram-panel search-panel">
-                <span className="panel-label">01 / НАЙТИ ЧАТ</span>
-                <h2>Поиск сообществ</h2>
+                <span className="panel-label">01 / НАЙТИ КАНАЛ</span>
+                <h2>Поиск публичных каналов</h2>
                 <form className="telegram-search" onSubmit={searchChats}>
                   <input className="form-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Например: маркетинг Москва" />
                   <button className="btn btn-primary" disabled={busy === 'search'}>{busy === 'search' ? 'Ищем…' : 'Найти'}</button>
                 </form>
                 <div className="telegram-chat-list">
-                  {chats.length === 0 && <div className="telegram-empty">Введите тему или название чата</div>}
+                  {chats.length === 0 && <div className="telegram-empty">Введите ключевое слово или название канала</div>}
                   {chats.map((chat) => (
                     <button key={chat.id} className={selectedChat?.id === chat.id ? 'selected' : ''} onClick={() => { setSelectedChat(chat); setResult(null); }}>
                       <span className="chat-mark">{chat.type === 'channel' ? 'К' : 'Г'}</span>
@@ -291,6 +292,12 @@ export function ParserTelegram() {
                     </button>
                   ))}
                 </div>
+                {chats.length > 0 && (
+                  <button className="btn btn-secondary" onClick={() => saveCsv(
+                    `telegram-channels-${query.trim() || 'search'}.csv`,
+                    [['Название', 'Юзернейм', 'Ссылка', 'Участников'], ...chats.map((chat) => [chat.title, chat.username ? `@${chat.username}` : '', chat.link, chat.participantsCount || 'Н/Д'])]
+                  )}>Скачать найденные каналы CSV</button>
+                )}
               </div>
 
               <div className="telegram-panel parse-panel">
