@@ -8,9 +8,9 @@
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
-    "host:start": "pm2 startOrReload ecosystem.config.cjs --update-env && pm2 save",
-    "host:restart": "pm2 restart ecosystem.config.cjs --update-env && pm2 save",
-    "host:status": "pm2 status",
+    "host:start": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/host-manager.ps1 start",
+    "host:restart": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/host-manager.ps1 restart",
+    "host:status": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/host-manager.ps1 status",
     "launcher": "electron main.js"
   },
   "devDependencies": {
