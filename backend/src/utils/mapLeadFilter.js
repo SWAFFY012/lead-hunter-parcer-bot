@@ -47,6 +47,15 @@ export function matchesMapLeadFilters(lead, filters) {
     && hasMapLeadSocialPlatform(lead, normalized.socialPlatform);
 }
 
+// Проверка только по website/phone — до сбора соцсетей, чтобы не тратить
+// время на карточки, которые заведомо не пройдут фильтр (например, сайт
+// есть, а фильтр требует "без сайта").
+export function matchesMapLeadPresenceFilters(card, filters) {
+  const normalized = normalizeMapLeadFilters(filters);
+  return matchesPresence(normalized.website, Boolean(card.website))
+    && matchesPresence(normalized.phone, Boolean(card.phone));
+}
+
 export function hasActiveMapLeadFilters(filters) {
   const normalized = normalizeMapLeadFilters(filters);
   return Object.values(normalized).some((value) => value !== 'all');
