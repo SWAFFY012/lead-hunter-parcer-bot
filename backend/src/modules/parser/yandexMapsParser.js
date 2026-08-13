@@ -173,11 +173,9 @@ async function extractCard(page) {
   });
 }
 
-export async function startYandexMapsParsing({ query, targetCount = 30 }) {
+export async function startYandexMapsParsing({ query, targetCount = 30, filters: rawFilters }) {
   if (parserRunning) return { success: false, error: 'Парсер Яндекс Карт уже запущен.' };
-  // Yandex Maps now collects every card in the result. Old filter values can
-  // remain in browser localStorage, so deliberately ignore them server-side.
-  const filters = normalizeMapLeadFilters();
+  const filters = normalizeMapLeadFilters(rawFilters);
   parserRunning = true;
   shouldStop = false;
   startMapParserRun(PLATFORM, { query, targetCount, filters });
@@ -223,7 +221,7 @@ export async function startYandexMapsParsing({ query, targetCount = 30 }) {
     let candidatesChecked = 0;
     let duplicatesSkipped = 0;
     let consecutiveEmptyPages = 0;
-    io.emit('parser:log', { platform: 'yandex_maps', message: `Собираем ${targetCount} компаний подряд, без фильтрации.`, type: 'info' });
+    io.emit('parser:log', { platform: 'yandex_maps', message: `Собираем ${targetCount} подходящих компаний.`, type: 'info' });
 
     for (let pageIndex = 0; matchedCount < targetCount; pageIndex++) {
       if (shouldStop) break;
