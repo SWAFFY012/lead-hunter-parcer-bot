@@ -73,26 +73,44 @@ router.post('/import', async (req, res) => {
 
     let imported = 0;
     let skipped = 0;
+    let updated = 0;
 
     for (const item of items) {
       const phone = String(item?.phone || '').trim();
       if (!phone) { skipped++; continue; }
+
+      const niche = item.niche || batchNiche;
 
       const [lead] = await db`
         INSERT INTO leads (name, phone, title, city, website, source_url, platform, status, source, niche, created_at)
         VALUES (
           ${item.name || ''}, ${phone}, ${item.title || ''}, ${item.address || ''},
           ${item.website || ''}, ${item.sourceUrl || ''}, ${item.platform || 'parser'},
-          'new', 'map_parser', ${item.niche || batchNiche}, NOW()
+          'new', 'map_parser', ${niche}, NOW()
         )
         ON CONFLICT (phone) DO NOTHING
         RETURNING id
       `;
 
-      if (lead) imported++; else skipped++;
+      if (lead) {
+        imported++;
+        continue;
+      }
+
+      // Телефон уже есть: если задана ниша — переносим существующего лида в эту воронку
+      if (niche) {
+        const [moved] = await db`
+          UPDATE leads SET niche = ${niche}
+          WHERE phone = ${phone} AND (niche IS DISTINCT FROM ${niche})
+          RETURNING id
+        `;
+        if (moved) { updated++; continue; }
+      }
+
+      skipped++;
     }
 
-    res.status(201).json({ imported, skipped });
+    res.status(201).json({ imported, updated, skipped });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

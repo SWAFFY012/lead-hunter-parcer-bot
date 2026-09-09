@@ -35,6 +35,7 @@ export function Pipeline() {
   const [newNicheText, setNewNicheText] = useState('');
   const [savingNiche, setSavingNiche] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
+  const [total, setTotal] = useState(0);
 
   const selectedLead = useMemo(
     () => leads.find(l => l.id === selectedLeadId) || null,
@@ -42,6 +43,13 @@ export function Pipeline() {
   );
 
   const handleLeadUpdated = (updated: Lead) => {
+    // Лид сменил нишу и больше не принадлежит открытой воронке — убираем из доски
+    if (activeNiche !== ALL_NICHES && (updated.niche || '') !== activeNiche) {
+      setLeads(prev => prev.filter(l => l.id !== updated.id));
+      setTotal(t => Math.max(0, t - 1));
+      setSelectedLeadId(null);
+      return;
+    }
     setLeads(prev => prev.map(l => (l.id === updated.id ? { ...l, ...updated } : l)));
   };
 
@@ -54,10 +62,12 @@ export function Pipeline() {
 
   const fetchLeads = () => {
     setLoading(true);
-    fetch(`/api/leads?limit=2000`)
+    const qs = activeNiche === ALL_NICHES ? '' : `&niche=${encodeURIComponent(activeNiche)}`;
+    fetch(`/api/leads?limit=2000${qs}`)
       .then(r => r.json())
       .then(data => {
         setLeads(data.leads || []);
+        setTotal(typeof data.total === 'number' ? data.total : (data.leads || []).length);
         setLoading(false);
       })
       .catch(e => {
@@ -68,9 +78,13 @@ export function Pipeline() {
 
   useEffect(() => {
     fetchNiches();
-    fetchLeads();
   }, []);
 
+  useEffect(() => {
+    fetchLeads();
+  }, [activeNiche]);
+
+  // Фильтрация по нише делается на сервере; здесь только страховка от рассинхрона
   const visibleLeads = useMemo(() => {
     if (activeNiche === ALL_NICHES) return leads;
     return leads.filter(l => (l.niche || '') === activeNiche);
@@ -133,7 +147,11 @@ export function Pipeline() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Воронка продаж</h1>
-          <div className="text-secondary mt-1">Канбан-доска по нишам — выберите нишу, чтобы увидеть её воронку</div>
+          <div className="text-secondary mt-1">
+            Канбан-доска по нишам — выберите нишу, чтобы увидеть её воронку
+            {' · '}
+            {activeNiche === ALL_NICHES ? 'всего лидов' : `в воронке «${activeNiche}»`}: <b>{total}</b>
+          </div>
         </div>
       </div>
 

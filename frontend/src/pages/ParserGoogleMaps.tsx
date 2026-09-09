@@ -521,10 +521,13 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leads: withPhone, niche: selectedNiche || null }),
       });
-      const data: { error?: string; imported?: number; skipped?: number } = await response.json();
+      const data: { error?: string; imported?: number; updated?: number; skipped?: number } = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не удалось добавить лидов в CRM.');
       const target = selectedNiche ? `в воронку «${selectedNiche}»` : 'без ниши';
-      setCrmNotice(`В CRM добавлено ${target}: ${data.imported ?? 0}${data.skipped ? `, пропущено (дубли/без телефона): ${data.skipped}` : ''}.`);
+      const parts = [`новых: ${data.imported ?? 0}`];
+      if (data.updated) parts.push(`перенесено из других воронок: ${data.updated}`);
+      if (data.skipped) parts.push(`пропущено (уже в этой воронке / без телефона): ${data.skipped}`);
+      setCrmNotice(`В CRM ${target} — ${parts.join(', ')}.`);
       setLastImportNiche(selectedNiche);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось добавить лидов в CRM.');
