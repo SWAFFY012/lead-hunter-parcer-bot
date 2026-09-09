@@ -143,7 +143,7 @@ export function Pipeline() {
   if (loading) return <div className="p-8 text-secondary">Загрузка воронки...</div>;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" style={{ minHeight: 0, overflow: 'hidden' }}>
       <div className="page-header">
         <div>
           <h1 className="page-title">Воронка продаж</h1>
@@ -155,7 +155,7 @@ export function Pipeline() {
         </div>
       </div>
 
-      <div className="page-body" style={{ paddingBottom: 0 }}>
+      <div className="page-body" style={{ flex: '0 0 auto', paddingTop: '16px', paddingBottom: 0 }}>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '16px' }}>
           <button
             className="btn"
@@ -205,9 +205,9 @@ export function Pipeline() {
         </div>
       </div>
 
-      <div className="page-body" style={{ flex: 1, overflowX: 'auto', minHeight: 0, paddingTop: 0 }}>
+      <div className="page-body" style={{ flex: 1, overflowX: 'auto', minHeight: 0, paddingTop: 0, paddingBottom: '16px' }}>
         <DragDropContext onDragEnd={onDragEnd}>
-          <div style={{ display: 'flex', gap: '20px', height: '100%', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: '20px', height: '100%', alignItems: 'stretch' }}>
             {COLUMNS.map(column => {
               const columnLeads = getLeadsByStatus(column.id);
 
@@ -218,7 +218,8 @@ export function Pipeline() {
                   borderRadius: '12px',
                   display: 'flex',
                   flexDirection: 'column',
-                  maxHeight: '100%',
+                  height: '100%',
+                  minHeight: 0,
                   border: '1px solid var(--color-border-weak)'
                 }}>
                   <div style={{
