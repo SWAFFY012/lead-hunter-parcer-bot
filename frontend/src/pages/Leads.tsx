@@ -80,6 +80,7 @@ export function Leads() {
   const [selectedLead, setSelectedLead] = useState<(Lead & { messages?: Message[] }) | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [nicheFilter, setNicheFilter] = useState('');
   const [loading, setLoading] = useState(true);
   
   const [replyText, setReplyText] = useState('');
@@ -168,6 +169,7 @@ export function Leads() {
       const qs = new URLSearchParams();
       if (search) qs.append('search', search);
       if (statusFilter) qs.append('status', statusFilter);
+      if (nicheFilter) qs.append('niche', nicheFilter);
       qs.append('limit', '1000000');
 
       const res = await fetch(`/api/leads?${qs.toString()}`);
@@ -182,7 +184,7 @@ export function Leads() {
 
   useEffect(() => {
     fetchLeads();
-  }, [search, statusFilter]);
+  }, [search, statusFilter, nicheFilter]);
 
   useEffect(() => {
     const leadId = searchParams.get('lead_id');
@@ -443,6 +445,28 @@ export function Leads() {
     }
   };
 
+  const handleNicheChange = async (newNiche: string) => {
+    if (!selectedLead) return;
+    try {
+      const res = await fetch(`/api/leads/${selectedLead.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche: newNiche || null })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setSelectedLead(prev => prev ? { ...prev, niche: updated.niche } : null);
+        setLeads(prev => prev.map(l => l.id === updated.id ? { ...l, niche: updated.niche } : l));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Ошибка смены ниши: ${err.error || res.status}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка сети при смене ниши');
+    }
+  };
+
   const handleAgreementChange = async (newAgreement: 'green' | 'red' | null) => {
     if (!selectedLead) return;
     try {
@@ -558,7 +582,13 @@ export function Leads() {
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
-          <button className="btn btn-ghost" onClick={() => { setSearch(''); setStatusFilter(''); }}>Сбросить</button>
+          <select className="form-select" style={{ maxWidth: '180px' }} value={nicheFilter} onChange={e => setNicheFilter(e.target.value)}>
+            <option value="">Все ниши</option>
+            {niches.map(n => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+          <button className="btn btn-ghost" onClick={() => { setSearch(''); setStatusFilter(''); setNicheFilter(''); }}>Сбросить</button>
         </div>
 
         {/* Data Table */}
@@ -759,6 +789,17 @@ export function Leads() {
                 <select className="form-select" value={selectedLead.status} onChange={e => handleStatusChange(e.target.value)}>
                   {Object.entries(STATUS_LABELS).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Niche block */}
+              <div>
+                <label className="form-label">Ниша (воронка)</label>
+                <select className="form-select" value={selectedLead.niche || ''} onChange={e => handleNicheChange(e.target.value)}>
+                  <option value="">Без ниши</option>
+                  {niches.map(n => (
+                    <option key={n} value={n}>{n}</option>
                   ))}
                 </select>
               </div>
