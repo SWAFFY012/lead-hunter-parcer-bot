@@ -85,7 +85,12 @@ export async function listSavedMapLeads() {
   const cache = await getCache();
   return Object.values(cache.leads)
     .filter((entry) => entry.savedAt && entry.lead)
-    .map((entry) => ({ ...entry.lead, savedAt: entry.savedAt, contactedAt: entry.contactedAt || '' }))
+    .map((entry) => ({
+      ...entry.lead,
+      savedAt: entry.savedAt,
+      contactedAt: entry.contactedAt || '',
+      agreementStatus: entry.agreementStatus || null,
+    }))
     .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
 
@@ -97,6 +102,7 @@ export async function listOutreachMapLeads() {
       ...entry.lead,
       queuedAt: entry.queuedAt,
       outreachDraft: entry.outreachDraft || '',
+      agreementStatus: entry.agreementStatus || null,
     }))
     .sort((a, b) => b.queuedAt.localeCompare(a.queuedAt));
 }
@@ -186,6 +192,24 @@ export async function setMapLeadContacted(platform, sourceUrl, contacted) {
     ...entry.lead,
     savedAt: entry.savedAt || '',
     contactedAt: entry.contactedAt || '',
+    agreementStatus: entry.agreementStatus || null,
+  };
+}
+
+export async function setMapLeadAgreementStatus(platform, sourceUrl, agreementStatus) {
+  const cache = await getCache();
+  const entry = cache.leads[cacheKey(platform, sourceUrl)];
+  if (!entry?.lead) return null;
+
+  if (agreementStatus === 'green' || agreementStatus === 'red') entry.agreementStatus = agreementStatus;
+  else delete entry.agreementStatus;
+
+  await persistCache(cache);
+  return {
+    ...entry.lead,
+    savedAt: entry.savedAt || '',
+    contactedAt: entry.contactedAt || '',
+    agreementStatus: entry.agreementStatus || null,
   };
 }
 

@@ -19,13 +19,14 @@ export function getDb() {
   }
 
   if (!sql) {
+    const isLocal = /@(127\.0\.0\.1|localhost)[:/]/.test(CONNECTION_STRING);
     sql = postgres(CONNECTION_STRING, {
-      ssl: 'require',
+      ssl: isLocal ? false : 'require',
       max: 10, // connection pool size
       idle_timeout: 20,
       connect_timeout: 10,
     });
-    console.log('[DB] Supabase PostgreSQL connected');
+    console.log(`[DB] PostgreSQL connected (${isLocal ? 'local' : 'remote/SSL'})`);
   }
   return sql;
 }
@@ -50,9 +51,61 @@ export async function runMigrations() {
       ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_status_check
     `;
     await db`
-      ALTER TABLE leads ADD CONSTRAINT leads_status_check 
-      CHECK (status IN ('new','ai_ready','reaction_sent','message_sent','ready_to_send','sent','invalid_number','failed','replied','interested','deal','refused'))
+      ALTER TABLE leads ADD CONSTRAINT leads_status_check
+      CHECK (status IN ('new','ai_ready','reaction_sent','message_sent','ready_to_send','sent','invalid_number','failed','replied','interested','deal','refused','contact','call','meeting_scheduled','meeting_done','proposal'))
     `;
+
+    // Ручное добавление лидов: помечаем источник, чтобы отличать от парсера
+    await db`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'parser'
+    `;
+
+    // История заметок по лиду (раньше было одно поле leads.notes, теперь список с датами)
+    await db`
+      CREATE TABLE IF NOT EXISTS lead_notes (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        text TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await db`
+      CREATE INDEX IF NOT EXISTS idx_lead_notes_lead ON lead_notes(lead_id)
+    `;
+
+    // Задачи по лидам (Связаться / Встреча) — ежедневник СРМ
+    await db`
+      CREATE TABLE IF NOT EXISTS lead_tasks (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        type TEXT NOT NULL DEFAULT 'call' CHECK (type IN ('call','meeting')),
+        due_date DATE NOT NULL,
+        time_start TEXT,
+        time_end TEXT,
+        note TEXT,
+        result TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','cancelled')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        done_at TIMESTAMPTZ
+      )
+    `;
+    await db`CREATE INDEX IF NOT EXISTS idx_lead_tasks_lead ON lead_tasks(lead_id)`;
+    await db`CREATE INDEX IF NOT EXISTS idx_lead_tasks_due_date ON lead_tasks(due_date)`;
+
+    // Пометка лида зелёным (согласен) / красным (не согласен) — СРМ
+    await db`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS agreement_status TEXT
+      CHECK (agreement_status IN ('green','red'))
+    `;
+
+    // Ниша лида (авто/стройка/адвокаты и т.д.) — для канбана по воронкам
+    await db`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS niche TEXT
+    `;
+    await db`
+      CREATE INDEX IF NOT EXISTS idx_leads_niche ON leads(niche)
+    `;
+
     console.log('[DB] Migrations applied successfully');
   } catch (err) {
     // Constraint may already be correct — safe to ignore

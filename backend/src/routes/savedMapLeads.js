@@ -10,6 +10,7 @@ import {
   saveMapLeads,
   setMapLeadOutreachDraft,
   setMapLeadContacted,
+  setMapLeadAgreementStatus,
 } from '../utils/mapLeadCache.js';
 import { io } from '../server.js';
 import { recordMapParserContacted, removeMapParserLeadsByName } from '../utils/mapParserRunStore.js';
@@ -99,6 +100,20 @@ router.patch('/contacted', asyncRoute(async (req, res) => {
   const lead = await setMapLeadContacted(platform, sourceUrl, contacted);
   if (!lead) return res.status(404).json({ ok: false, error: 'Компания не найдена в памяти парсера.' });
   recordMapParserContacted(platform, sourceUrl, lead.contactedAt);
+  return res.json({ ok: true, lead });
+}));
+
+router.patch('/agreement-status', asyncRoute(async (req, res) => {
+  const platform = String(req.body?.platform || '');
+  const sourceUrl = String(req.body?.sourceUrl || '');
+  const agreementStatus = req.body?.agreementStatus;
+  if (!platform || !sourceUrl) return res.status(400).json({ ok: false, error: 'Не указана компания.' });
+  if (agreementStatus !== 'green' && agreementStatus !== 'red' && agreementStatus !== null) {
+    return res.status(400).json({ ok: false, error: 'Недопустимый статус.' });
+  }
+
+  const lead = await setMapLeadAgreementStatus(platform, sourceUrl, agreementStatus);
+  if (!lead) return res.status(404).json({ ok: false, error: 'Компания не найдена в памяти парсера.' });
   return res.json({ ok: true, lead });
 }));
 

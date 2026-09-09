@@ -9,6 +9,7 @@ const navItems = [
   { to: '/manual-bases', icon: '🎯', label: 'Ручные базы' },
   { to: '/profiles', icon: '🧬', label: 'Профили' },
   { to: '/leads', icon: '👥', label: 'Лиды / CRM' },
+  { to: '/tasks', icon: '🗓️', label: 'Задачи' },
   { to: '/pipeline', icon: '🗂️', label: 'Воронка' },
   { to: '/ai', icon: '🤖', label: 'Промпты и шаблоны' },
   { to: '/sender', icon: '📤', label: 'Рассылка' },

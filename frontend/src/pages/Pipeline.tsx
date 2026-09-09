@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 interface Lead {
@@ -8,35 +8,60 @@ interface Lead {
   status: string;
   title: string;
   city: string;
+  niche?: string | null;
 }
 
 const COLUMNS = [
-  { id: 'replied', title: 'Ответили', color: '#7C3AED' },
+  { id: 'new', title: 'New', color: '#64748B' },
+  { id: 'call', title: 'Звонок', color: '#7C3AED' },
   { id: 'interested', title: 'Интерес', color: 'var(--color-warning)' },
+  { id: 'meeting_scheduled', title: 'Встреча назначена', color: '#0EA5E9' },
+  { id: 'meeting_done', title: 'Встреча проведена', color: '#6366F1' },
+  { id: 'proposal', title: 'КП', color: '#F59E0B' },
   { id: 'deal', title: 'Сделка', color: 'var(--color-success)' },
-  { id: 'refused', title: 'Отказ', color: 'var(--color-error)' },
 ];
+
+const ALL_NICHES = '__all__';
 
 export function Pipeline() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [niches, setNiches] = useState<string[]>([]);
+  const [activeNiche, setActiveNiche] = useState<string>(ALL_NICHES);
+  const [showAddNiche, setShowAddNiche] = useState(false);
+  const [newNicheText, setNewNicheText] = useState('');
+  const [savingNiche, setSavingNiche] = useState(false);
 
-  useEffect(() => {
-    fetch(`/api/leads?limit=1000`)
+  const fetchNiches = () => {
+    fetch('/api/leads/niches')
+      .then(r => r.json())
+      .then(d => setNiches(d.niches || []))
+      .catch(e => console.error(e));
+  };
+
+  const fetchLeads = () => {
+    setLoading(true);
+    fetch(`/api/leads?limit=2000`)
       .then(r => r.json())
       .then(data => {
-        // Filter out only pipeline-relevant leads
-        const pipelineLeads = (data.leads || []).filter((l: Lead) => 
-          ['replied', 'interested', 'deal', 'refused'].includes(l.status)
-        );
-        setLeads(pipelineLeads);
+        setLeads(data.leads || []);
         setLoading(false);
       })
       .catch(e => {
         console.error(e);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    fetchNiches();
+    fetchLeads();
   }, []);
+
+  const visibleLeads = useMemo(() => {
+    if (activeNiche === ALL_NICHES) return leads;
+    return leads.filter(l => (l.niche || '') === activeNiche);
+  }, [leads, activeNiche]);
 
   const onDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
@@ -62,7 +87,31 @@ export function Pipeline() {
     }
   };
 
-  const getLeadsByStatus = (status: string) => leads.filter(l => l.status === status);
+  const handleAddNiche = async () => {
+    const value = newNicheText.trim();
+    if (!value || savingNiche) return;
+    setSavingNiche(true);
+    try {
+      const nextPresets = Array.from(new Set([...niches, value]));
+      const res = await fetch('/api/leads/niches', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niches: nextPresets })
+      });
+      if (res.ok) {
+        setNiches(nextPresets);
+        setActiveNiche(value);
+        setNewNicheText('');
+        setShowAddNiche(false);
+      }
+    } catch (err) {
+      console.error('Failed to save niche', err);
+    } finally {
+      setSavingNiche(false);
+    }
+  };
+
+  const getLeadsByStatus = (status: string) => visibleLeads.filter(l => l.status === status);
 
   if (loading) return <div className="p-8 text-secondary">Загрузка воронки...</div>;
 
@@ -71,28 +120,78 @@ export function Pipeline() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Воронка продаж</h1>
-          <div className="text-secondary mt-1">Канбан-доска для ведения активных сделок</div>
+          <div className="text-secondary mt-1">Канбан-доска по нишам — выберите нишу, чтобы увидеть её воронку</div>
         </div>
       </div>
 
-      <div className="page-body" style={{ flex: 1, overflowX: 'auto', minHeight: 0 }}>
+      <div className="page-body" style={{ paddingBottom: 0 }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '16px' }}>
+          <button
+            className="btn"
+            onClick={() => setActiveNiche(ALL_NICHES)}
+            style={{
+              backgroundColor: activeNiche === ALL_NICHES ? 'var(--color-primary)' : 'var(--color-surface-alt)',
+              color: activeNiche === ALL_NICHES ? '#fff' : 'var(--color-text-secondary)',
+              border: '1px solid var(--color-border-weak)'
+            }}
+          >
+            Все ниши
+          </button>
+          {niches.map(n => (
+            <button
+              key={n}
+              className="btn"
+              onClick={() => setActiveNiche(n)}
+              style={{
+                backgroundColor: activeNiche === n ? 'var(--color-primary)' : 'var(--color-surface-alt)',
+                color: activeNiche === n ? '#fff' : 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border-weak)'
+              }}
+            >
+              {n}
+            </button>
+          ))}
+
+          {!showAddNiche ? (
+            <button className="btn btn-ghost" onClick={() => setShowAddNiche(true)}>➕ Ниша</button>
+          ) : (
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                className="form-input"
+                autoFocus
+                style={{ width: '160px' }}
+                value={newNicheText}
+                onChange={e => setNewNicheText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddNiche(); if (e.key === 'Escape') setShowAddNiche(false); }}
+                placeholder="Название ниши"
+              />
+              <button className="btn btn-primary" onClick={handleAddNiche} disabled={!newNicheText.trim() || savingNiche}>
+                {savingNiche ? '...' : 'OK'}
+              </button>
+              <button className="btn btn-ghost" onClick={() => { setShowAddNiche(false); setNewNicheText(''); }}>✕</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="page-body" style={{ flex: 1, overflowX: 'auto', minHeight: 0, paddingTop: 0 }}>
         <DragDropContext onDragEnd={onDragEnd}>
           <div style={{ display: 'flex', gap: '20px', height: '100%', alignItems: 'flex-start' }}>
             {COLUMNS.map(column => {
               const columnLeads = getLeadsByStatus(column.id);
-              
+
               return (
-                <div key={column.id} style={{ 
-                  flex: '0 0 300px', 
-                  backgroundColor: 'var(--color-bg)', 
+                <div key={column.id} style={{
+                  flex: '0 0 280px',
+                  backgroundColor: 'var(--color-bg)',
                   borderRadius: '12px',
                   display: 'flex',
                   flexDirection: 'column',
                   maxHeight: '100%',
                   border: '1px solid var(--color-border-weak)'
                 }}>
-                  <div style={{ 
-                    padding: '16px', 
+                  <div style={{
+                    padding: '16px',
                     borderBottom: '1px solid var(--color-border-weak)',
                     display: 'flex',
                     alignItems: 'center',
@@ -110,12 +209,12 @@ export function Pipeline() {
 
                   <Droppable droppableId={column.id}>
                     {(provided, snapshot) => (
-                      <div 
-                        ref={provided.innerRef} 
+                      <div
+                        ref={provided.innerRef}
                         {...provided.droppableProps}
-                        style={{ 
-                          padding: '16px', 
-                          flex: 1, 
+                        style={{
+                          padding: '16px',
+                          flex: 1,
                           overflowY: 'auto',
                           minHeight: '150px',
                           backgroundColor: snapshot.isDraggingOver ? 'var(--color-surface-alt)' : 'transparent',
@@ -142,10 +241,16 @@ export function Pipeline() {
                                   {lead.name || 'Без имени'}
                                 </div>
                                 <div className="mono text-xs text-secondary mb-3">{lead.phone}</div>
-                                
+
                                 <div style={{ fontSize: '13px', color: 'var(--color-text-primary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                                   {lead.title}
                                 </div>
+
+                                {activeNiche === ALL_NICHES && lead.niche && (
+                                  <span className="badge" style={{ marginTop: '8px', display: 'inline-block', backgroundColor: 'var(--color-surface-alt)', color: 'var(--color-text-secondary)', fontSize: '11px' }}>
+                                    {lead.niche}
+                                  </span>
+                                )}
                               </div>
                             )}
                           </Draggable>

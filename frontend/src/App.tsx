@@ -12,6 +12,7 @@ import { ParserYandexMaps } from './pages/ParserYandexMaps';
 import { Parser2Gis } from './pages/Parser2Gis';
 import { ManualBases } from './pages/ManualBases';
 import { Leads } from './pages/Leads';
+import { Tasks } from './pages/Tasks';
 import { Pipeline } from './pages/Pipeline';
 import { AIMessages } from './pages/AIMessages';
 import { Sender } from './pages/Sender';
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="/parser/2gis-maps" element={<Parser2Gis />} />
               <Route path="/manual-bases" element={<ManualBases />} />
               <Route path="/leads" element={<Leads />} />
+              <Route path="/tasks" element={<Tasks />} />
               <Route path="/pipeline" element={<Pipeline />} />
               <Route path="/ai" element={<AIMessages />} />
               <Route path="/sender" element={<Sender />} />

@@ -328,6 +328,20 @@ body {
 .maps-contact-check input { width: 14px; height: 14px; margin: 0; accent-color: #0f766e; cursor: pointer; }
 .maps-contact-check.contacted { border-color: #5eead4; background: #ecfdf5; color: #0f766e; }
 .maps-contact-check:has(input:disabled) { cursor: wait; opacity: .65; }
+.maps-agreement-mark { position: relative; display: inline-block; }
+.maps-agreement-square { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #cbd5e1; background: #e2e8f0; cursor: pointer; padding: 0; }
+.maps-agreement-square:hover { border-color: #94a3b8; }
+.maps-agreement-square:disabled { cursor: wait; opacity: .6; }
+.maps-agreement-square.green { background: #22c55e; border-color: #16a34a; }
+.maps-agreement-square.red { background: #ef4444; border-color: #dc2626; }
+.maps-agreement-menu { position: absolute; top: 22px; left: 0; z-index: 20; display: flex; flex-direction: column; min-width: 120px; background: #fff; border: 1px solid #dbe3ec; border-radius: 6px; box-shadow: 0 8px 20px rgba(15, 23, 42, .12); overflow: hidden; }
+.maps-agreement-option { border: 0; background: #fff; text-align: left; padding: 7px 10px; font-size: 11px; font-weight: 600; cursor: pointer; color: #334155; white-space: nowrap; }
+.maps-agreement-option:hover { background: #f1f5f9; }
+.maps-agreement-option.green { color: #16a34a; }
+.maps-agreement-option.red { color: #dc2626; }
+.maps-agreement-option.clear { color: #64748b; border-top: 1px solid #eef2f7; }
+.maps-agreement-pct.green b { color: #16a34a; }
+.maps-agreement-pct.red b { color: #dc2626; }
 .maps-saved-results { margin-top: 22px; border-top: 3px solid #0f766e; }
 .maps-saved-results .panel-label { color: #0f766e; }
 .maps-saved-results .results-heading p { margin-top: 5px; color: #64748b; font-size: 11px; }

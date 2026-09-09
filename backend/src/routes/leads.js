@@ -1,13 +1,23 @@
 import { Router } from 'express';
-import { getDb } from '../db/database.js';
+import { getDb, getSetting, setSetting } from '../db/database.js';
 
 const router = Router();
+const DEFAULT_NICHES = ['Авто', 'Стройка', 'Адвокаты'];
+
+function parseLeadTags(lead) {
+  if (!lead) return lead;
+  let tags = lead.tags;
+  if (typeof tags === 'string') {
+    try { tags = JSON.parse(tags); } catch { tags = []; }
+  }
+  return { ...lead, tags: Array.isArray(tags) ? tags : [] };
+}
 
 // GET leads with filters
 router.get('/', async (req, res) => {
   try {
     const db = getDb();
-    const { status, campaign_id, account_id, search, limit = 100, offset = 0 } = req.query;
+    const { status, campaign_id, account_id, search, niche, limit = 100, offset = 0 } = req.query;
 
     // Build dynamic query using postgres.js fragment approach
     let conditions = db`1=1`;
@@ -15,17 +25,114 @@ router.get('/', async (req, res) => {
     if (campaign_id) conditions = db`${conditions} AND campaign_id = ${campaign_id}`;
     if (account_id) conditions = db`${conditions} AND assigned_account = ${account_id}`;
     if (search) conditions = db`${conditions} AND (name ILIKE ${'%' + search + '%'} OR phone ILIKE ${'%' + search + '%'} OR title ILIKE ${'%' + search + '%'})`;
+    if (niche) conditions = db`${conditions} AND niche = ${niche}`;
 
     const [{ count }] = await db`SELECT COUNT(*)::int as count FROM leads WHERE ${conditions}`;
     const leads = await db`SELECT * FROM leads WHERE ${conditions} ORDER BY created_at DESC LIMIT ${Number(limit)} OFFSET ${Number(offset)}`;
 
-    res.json({ leads, total: count, limit: Number(limit), offset: Number(offset) });
+    res.json({ leads: leads.map(parseLeadTags), total: count, limit: Number(limit), offset: Number(offset) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET dashboard stats  
+// POST create lead manually
+router.post('/', async (req, res) => {
+  try {
+    const db = getDb();
+    const { name, phone, city, status, note, niche } = req.body;
+
+    if (!phone) return res.status(400).json({ error: 'Phone is required' });
+
+    const [lead] = await db`
+      INSERT INTO leads (name, phone, city, status, source, niche, created_at)
+      VALUES (${name || ''}, ${phone}, ${city || ''}, ${status || 'new'}, 'manual', ${niche || null}, NOW())
+      ON CONFLICT (phone) DO NOTHING
+      RETURNING *
+    `;
+
+    if (!lead) return res.status(409).json({ error: 'Lead with this phone already exists' });
+
+    if (note && note.trim()) {
+      await db`INSERT INTO lead_notes (lead_id, text) VALUES (${lead.id}, ${note.trim()})`;
+    }
+
+    res.status(201).json(lead);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST bulk import leads from map parser (Google/Yandex/2GIS)
+router.post('/import', async (req, res) => {
+  try {
+    const db = getDb();
+    const items = Array.isArray(req.body?.leads) ? req.body.leads : [];
+    if (!items.length) return res.status(400).json({ error: 'Передайте хотя бы одного лида' });
+    const batchNiche = req.body?.niche || null;
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const item of items) {
+      const phone = String(item?.phone || '').trim();
+      if (!phone) { skipped++; continue; }
+
+      const [lead] = await db`
+        INSERT INTO leads (name, phone, title, city, website, source_url, platform, status, source, niche, created_at)
+        VALUES (
+          ${item.name || ''}, ${phone}, ${item.title || ''}, ${item.address || ''},
+          ${item.website || ''}, ${item.sourceUrl || ''}, ${item.platform || 'parser'},
+          'new', 'map_parser', ${item.niche || batchNiche}, NOW()
+        )
+        ON CONFLICT (phone) DO NOTHING
+        RETURNING id
+      `;
+
+      if (lead) imported++; else skipped++;
+    }
+
+    res.status(201).json({ imported, skipped });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET niche presets (список для канбана: сохранённые + встречающиеся в БД)
+router.get('/niches', async (_req, res) => {
+  try {
+    const db = getDb();
+    const raw = await getSetting('niche_presets');
+    let presets = [];
+    if (raw) {
+      try { presets = JSON.parse(raw); } catch { presets = []; }
+    }
+    if (!Array.isArray(presets) || presets.length === 0) presets = DEFAULT_NICHES;
+
+    const rows = await db`SELECT DISTINCT niche FROM leads WHERE niche IS NOT NULL AND niche <> '' ORDER BY niche`;
+    const used = rows.map(r => r.niche);
+
+    const all = Array.from(new Set([...presets, ...used]));
+    res.json({ niches: all, presets });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT save niche presets list
+router.put('/niches', async (req, res) => {
+  try {
+    const { niches } = req.body;
+    if (!Array.isArray(niches)) return res.status(400).json({ error: 'niches must be an array' });
+    const cleaned = niches.map(n => String(n).trim()).filter(Boolean);
+    await setSetting('niche_presets', JSON.stringify(cleaned));
+    res.json({ presets: cleaned });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET dashboard stats
 router.get('/stats/dashboard', async (_req, res) => {
   try {
     const db = getDb();
@@ -75,16 +182,17 @@ router.get('/stats/dashboard', async (_req, res) => {
 router.get('/export/csv', async (req, res) => {
   try {
     const db = getDb();
-    const { campaign_id, status, replied_only } = req.query;
+    const { campaign_id, status, replied_only, niche } = req.query;
 
     let conditions = db`1=1`;
     if (campaign_id) conditions = db`${conditions} AND campaign_id = ${campaign_id}`;
     if (status) conditions = db`${conditions} AND status = ${status}`;
+    if (niche) conditions = db`${conditions} AND niche = ${niche}`;
     if (replied_only === 'true') conditions = db`${conditions} AND status IN ('replied','interested','deal')`;
 
     const leads = await db`SELECT * FROM leads WHERE ${conditions}`;
 
-    const headers = ['id', 'phone', 'name', 'title', 'status', 'city', 'ai_message', 'notes', 'created_at', 'last_contact_at'];
+    const headers = ['id', 'phone', 'name', 'title', 'status', 'niche', 'city', 'ai_message', 'notes', 'created_at', 'last_contact_at'];
     const csv = [
       headers.join(','),
       ...leads.map(l => headers.map(h => `"${(l[h] || '').toString().replace(/"/g, '""')}"`).join(','))
@@ -117,27 +225,96 @@ router.get('/:id', async (req, res) => {
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
     
     const messages = await db`SELECT * FROM messages WHERE lead_id = ${lead.id} ORDER BY sent_at ASC`;
-    res.json({ ...lead, messages });
+    res.json({ ...parseLeadTags(lead), messages });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// PATCH update lead (status, notes, tags)
+// PATCH update lead (name, status, notes, tags)
 router.patch('/:id', async (req, res) => {
   try {
     const db = getDb();
-    const { status, notes, tags } = req.body;
+    const { name, status, notes, tags, agreement_status, niche } = req.body;
     const updates = {};
 
+    if (name !== undefined) updates.name = name;
     if (status) updates.status = status;
     if (notes !== undefined) updates.notes = notes;
     if (tags !== undefined) updates.tags = JSON.stringify(tags);
+    if (niche !== undefined) updates.niche = niche;
+    if (agreement_status !== undefined) {
+      if (agreement_status !== 'green' && agreement_status !== 'red' && agreement_status !== null) {
+        return res.status(400).json({ error: 'Invalid agreement_status' });
+      }
+      updates.agreement_status = agreement_status;
+    }
 
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'Nothing to update' });
 
     const [lead] = await db`UPDATE leads SET ${db(updates)} WHERE id = ${req.params.id} RETURNING *`;
-    res.json(lead);
+    res.json(parseLeadTags(lead));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET lead notes history
+router.get('/:id/notes', async (req, res) => {
+  try {
+    const db = getDb();
+    const notes = await db`SELECT * FROM lead_notes WHERE lead_id = ${req.params.id} ORDER BY created_at DESC`;
+    res.json(notes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST add note to lead
+router.post('/:id/notes', async (req, res) => {
+  try {
+    const db = getDb();
+    const { text } = req.body;
+    if (!text || !text.trim()) return res.status(400).json({ error: 'Text is required' });
+
+    const [lead] = await db`SELECT id FROM leads WHERE id = ${req.params.id}`;
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    const [note] = await db`
+      INSERT INTO lead_notes (lead_id, text) VALUES (${req.params.id}, ${text.trim()})
+      RETURNING *
+    `;
+    res.status(201).json(note);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH edit note
+router.patch('/:id/notes/:noteId', async (req, res) => {
+  try {
+    const db = getDb();
+    const { text } = req.body;
+    if (!text || !text.trim()) return res.status(400).json({ error: 'Text is required' });
+
+    const [note] = await db`
+      UPDATE lead_notes SET text = ${text.trim()}
+      WHERE id = ${req.params.noteId} AND lead_id = ${req.params.id}
+      RETURNING *
+    `;
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+    res.json(note);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE note
+router.delete('/:id/notes/:noteId', async (req, res) => {
+  try {
+    const db = getDb();
+    await db`DELETE FROM lead_notes WHERE id = ${req.params.noteId} AND lead_id = ${req.params.id}`;
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

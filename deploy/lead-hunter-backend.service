@@ -1,0 +1,18 @@
+[Unit]
+Description=LeadHunter Parser Backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lead-hunter/backend
+EnvironmentFile=/opt/lead-hunter/backend/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/lead-hunter-backend.log
+StandardError=append:/var/log/lead-hunter-backend.err
+
+[Install]
+WantedBy=multi-user.target

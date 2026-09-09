@@ -23,6 +23,7 @@ interface MapLead {
   savedAt?: string;
   contactedAt?: string;
   queuedAt?: string;
+  agreementStatus?: 'green' | 'red' | null;
 }
 
 type PresenceFilter = 'all' | 'with' | 'without';
@@ -125,6 +126,49 @@ function downloadXlsx(leads: MapLead[], provider: MapsProvider | 'saved') {
   return saveXlsx(`${provider}-maps-leads.xlsx`, mapLeadRows(leads));
 }
 
+function agreementStats(items: MapLead[]) {
+  const total = items.length;
+  const green = items.filter((item) => item.agreementStatus === 'green').length;
+  const red = items.filter((item) => item.agreementStatus === 'red').length;
+  const pct = (count: number) => (total ? Math.round((count / total) * 100) : 0);
+  return { green, red, greenPct: pct(green), redPct: pct(red) };
+}
+
+function AgreementMark({
+  lead,
+  menuKey,
+  setMenuKey,
+  updating,
+  onSet,
+}: {
+  lead: MapLead;
+  menuKey: string;
+  setMenuKey: (key: string) => void;
+  updating: boolean;
+  onSet: (lead: MapLead, status: 'green' | 'red' | null) => void;
+}) {
+  const key = `${lead.platform}:${lead.sourceUrl}`;
+  const isOpen = menuKey === key;
+  return (
+    <div className="maps-agreement-mark">
+      <button
+        type="button"
+        className={`maps-agreement-square ${lead.agreementStatus || 'none'}`}
+        title={lead.agreementStatus === 'green' ? 'Согласен' : lead.agreementStatus === 'red' ? 'Не согласен' : 'Отметить'}
+        disabled={updating}
+        onClick={() => setMenuKey(isOpen ? '' : key)}
+      />
+      {isOpen ? (
+        <div className="maps-agreement-menu">
+          <button type="button" className="maps-agreement-option green" onClick={() => onSet(lead, 'green')}>Согласен</button>
+          <button type="button" className="maps-agreement-option red" onClick={() => onSet(lead, 'red')}>Не согласен</button>
+          {lead.agreementStatus ? <button type="button" className="maps-agreement-option clear" onClick={() => onSet(lead, null)}>Сбросить</button> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function MapsParser({ provider }: { provider: MapsProvider }) {
   const navigate = useNavigate();
   const config = providerConfig[provider];
@@ -151,6 +195,10 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [savedNotice, setSavedNotice] = useState('');
   const [contactUpdating, setContactUpdating] = useState<Set<string>>(() => new Set());
   const [ignoring, setIgnoring] = useState<Set<string>>(() => new Set());
+  const [addingToCrm, setAddingToCrm] = useState(false);
+  const [crmNotice, setCrmNotice] = useState('');
+  const [agreementUpdating, setAgreementUpdating] = useState<Set<string>>(() => new Set());
+  const [agreementMenuKey, setAgreementMenuKey] = useState('');
 
   useEffect(() => {
     localStorage.setItem(`${config.storage}_query`, query);
@@ -391,6 +439,37 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
     }
   };
 
+  const setAgreement = async (lead: MapLead, agreementStatus: 'green' | 'red' | null) => {
+    const key = `${lead.platform}:${lead.sourceUrl}`;
+    setAgreementMenuKey('');
+    setAgreementUpdating((current) => new Set(current).add(key));
+    setError('');
+    try {
+      const response = await fetch(`${savedApi}/agreement-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: lead.platform, sourceUrl: lead.sourceUrl, agreementStatus }),
+      });
+      const data: { error?: string; lead?: MapLead } = await response.json();
+      if (!response.ok || !data.lead) throw new Error(data.error || 'Не удалось сохранить отметку.');
+      const replaceLead = (current: MapLead[]) => current.map((item) => (
+        item.platform === data.lead?.platform && item.sourceUrl === data.lead.sourceUrl
+          ? { ...item, ...data.lead }
+          : item
+      ));
+      setLeads(replaceLead);
+      setSavedLeads(replaceLead);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось сохранить отметку.');
+    } finally {
+      setAgreementUpdating((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
   const ignoreCompany = async (lead: MapLead) => {
     if (!window.confirm(`Больше не показывать компанию «${lead.name}» в результатах ${config.name}?`)) return;
     const normalizedName = normalizeCompanyName(lead.name);
@@ -413,6 +492,28 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
         next.delete(normalizedName);
         return next;
       });
+    }
+  };
+
+  const addToCrm = async (companies: MapLead[]) => {
+    const withPhone = companies.filter((lead) => lead.phone);
+    if (!withPhone.length) return;
+    setAddingToCrm(true);
+    setCrmNotice('');
+    setError('');
+    try {
+      const response = await fetch('/api/leads/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leads: withPhone }),
+      });
+      const data: { error?: string; imported?: number; skipped?: number } = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось добавить лидов в CRM.');
+      setCrmNotice(`В CRM добавлено: ${data.imported ?? 0}${data.skipped ? `, пропущено (дубли/без телефона): ${data.skipped}` : ''}.`);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось добавить лидов в CRM.');
+    } finally {
+      setAddingToCrm(false);
     }
   };
 
@@ -474,21 +575,23 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
         <section className="telegram-results maps-results">
           <div className="results-heading">
             <div><span className="panel-label">РЕЗУЛЬТАТ ПО УСЛОВИЯМ</span><h2>Подходящие компании</h2></div>
-            <div className="result-metrics"><span><b>{leads.length}</b> найдено</span><span><b>{progress.checked}</b> проверено</span><span><b>{progress.target || targetCount}</b> цель</span></div>
+            <div className="result-metrics"><span><b>{leads.length}</b> найдено</span><span><b>{progress.checked}</b> проверено</span><span><b>{progress.target || targetCount}</b> цель</span><span className="maps-agreement-pct green"><b>{agreementStats(leads).greenPct}%</b> согласны</span><span className="maps-agreement-pct red"><b>{agreementStats(leads).redPct}%</b> не согласны</span></div>
           </div>
-          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button><button className="btn btn-secondary" onClick={() => downloadXlsx(leads, provider)} disabled={!leads.length}>Скачать XLSX</button></div></div>
+          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><button className="btn btn-primary" onClick={() => addToCrm(leads)} disabled={!leads.some((lead) => lead.phone) || addingToCrm}>{addingToCrm ? 'Добавляем…' : 'В CRM (Новые)'}</button><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button><button className="btn btn-secondary" onClick={() => downloadXlsx(leads, provider)} disabled={!leads.length}>Скачать XLSX</button></div></div>
+          {crmNotice ? <div className="maps-saved-notice">✓ {crmNotice}</div> : null}
           {savedNotice ? <div className="maps-saved-notice">✓ {savedNotice}</div> : null}
-          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th><th>Написал</th><th>Действия</th></tr></thead><tbody>
+          <div className="telegram-table-wrap"><table><thead><tr><th></th><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th><th>Написал</th><th>Действия</th></tr></thead><tbody>
             {leads.map((lead) => <tr key={lead.sourceUrl}>
+              <td><AgreementMark lead={lead} menuKey={agreementMenuKey} setMenuKey={setAgreementMenuKey} updating={agreementUpdating.has(`${lead.platform}:${lead.sourceUrl}`)} onSet={setAgreement} /></td>
               <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.title}</small></td>
               <td>{lead.phone || '—'}</td>
               <td>{lead.website ? <a href={lead.website} target="_blank" rel="noreferrer">Открыть сайт</a> : <span className="maps-missing">Нет сайта</span>}</td>
               <td><div className="maps-socials">{lead.socialLinks?.length ? lead.socialLinks.map((social) => <a key={social.url} href={social.url} target="_blank" rel="noreferrer">{social.platform}</a>) : <span className="maps-missing">Не найдены</span>}</div></td>
               <td>{lead.address || '—'}</td><td>{lead.rating || '—'}</td>
               <td><label className={`maps-contact-check ${lead.contactedAt ? 'contacted' : ''}`}><input type="checkbox" checked={Boolean(lead.contactedAt)} onChange={() => toggleContacted(lead)} disabled={contactUpdating.has(`${lead.platform}:${lead.sourceUrl}`)} /><span>{lead.contactedAt ? 'Написал' : 'Не написал'}</span></label></td>
-              <td><div className="maps-row-actions"><button className={`maps-save-button ${savedSourceUrls.has(lead.sourceUrl) ? 'saved' : ''}`} onClick={() => saveCompanies([lead])} disabled={savedSourceUrls.has(lead.sourceUrl) || saving}>{savedSourceUrls.has(lead.sourceUrl) ? '✓ Сохранено' : 'Сохранить'}</button><button className={`maps-outreach-button ${outreachSourceUrls.has(lead.sourceUrl) ? 'queued' : ''}`} onClick={() => queueForOutreach(lead)} disabled={outreachSourceUrls.has(lead.sourceUrl) || !lead.socialLinks?.some((social) => social.platform.toLowerCase() === 'telegram')}>{outreachSourceUrls.has(lead.sourceUrl) ? '✓ В рассылке' : 'В рассылку'}</button>{provider === 'yandex' ? <button className="maps-ignore-button" onClick={() => ignoreCompany(lead)} disabled={ignoring.has(normalizeCompanyName(lead.name))}>Скрыть</button> : null}</div></td>
+              <td><div className="maps-row-actions"><button className="maps-save-button" onClick={() => addToCrm([lead])} disabled={!lead.phone || addingToCrm}>В CRM</button><button className={`maps-save-button ${savedSourceUrls.has(lead.sourceUrl) ? 'saved' : ''}`} onClick={() => saveCompanies([lead])} disabled={savedSourceUrls.has(lead.sourceUrl) || saving}>{savedSourceUrls.has(lead.sourceUrl) ? '✓ Сохранено' : 'Сохранить'}</button><button className={`maps-outreach-button ${outreachSourceUrls.has(lead.sourceUrl) ? 'queued' : ''}`} onClick={() => queueForOutreach(lead)} disabled={outreachSourceUrls.has(lead.sourceUrl) || !lead.socialLinks?.some((social) => social.platform.toLowerCase() === 'telegram')}>{outreachSourceUrls.has(lead.sourceUrl) ? '✓ В рассылке' : 'В рассылку'}</button>{provider === 'yandex' ? <button className="maps-ignore-button" onClick={() => ignoreCompany(lead)} disabled={ignoring.has(normalizeCompanyName(lead.name))}>Скрыть</button> : null}</div></td>
             </tr>)}
-            {!leads.length ? <tr><td colSpan={8} className="telegram-empty">{loading ? `Проверяем выдачу: найдено ${progress.matched} из ${progress.target}…` : 'Настройте условия и запустите поиск'}</td></tr> : null}
+            {!leads.length ? <tr><td colSpan={9} className="telegram-empty">{loading ? `Проверяем выдачу: найдено ${progress.matched} из ${progress.target}…` : 'Настройте условия и запустите поиск'}</td></tr> : null}
           </tbody></table></div>
           <button className="maps-log-toggle" onClick={() => setShowLogs((visible) => !visible)}>{showLogs ? 'Скрыть журнал' : `Показать журнал (${logs.length})`}</button>
           {showLogs ? <div className="maps-logs">{logs.length ? logs.map((log, index) => <div key={`${index}-${log}`}>{log}</div>) : <div>Ждём запуска парсера…</div>}</div> : null}
@@ -497,11 +600,12 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
         <section className="telegram-results maps-saved-results">
           <div className="results-heading">
             <div><span className="panel-label">МОЯ БАЗА ДЛЯ СВЯЗИ</span><h2>Сохранённые компании</h2><p>Контакты останутся здесь после нового поиска и перезапуска.</p></div>
-            <div className="saved-count"><b>{savedLeads.length}</b><span>в работе</span></div>
+            <div className="result-metrics"><div className="saved-count"><b>{savedLeads.length}</b><span>в работе</span></div><span className="maps-agreement-pct green"><b>{agreementStats(savedLeads).greenPct}%</b> согласны</span><span className="maps-agreement-pct red"><b>{agreementStats(savedLeads).redPct}%</b> не согласны</span></div>
           </div>
-          <div className="maps-result-actions"><span>Можно позвонить или написать позже — список хранится на этом компьютере.</span><div className="maps-action-buttons"><button className="btn btn-secondary" onClick={() => downloadCsv(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать CSV</button><button className="btn btn-secondary" onClick={() => downloadXlsx(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать XLSX</button><button className="btn btn-secondary maps-clear-button" onClick={removeAllSavedCompanies} disabled={!savedLeads.length}>Убрать всё</button></div></div>
-          <div className="telegram-table-wrap"><table><thead><tr><th>Компания</th><th>Телефон</th><th>Соцсети</th><th>Сайт</th><th>Написал</th><th>Сохранено</th><th></th></tr></thead><tbody>
+          <div className="maps-result-actions"><span>Можно позвонить или написать позже — список хранится на этом компьютере.</span><div className="maps-action-buttons"><button className="btn btn-primary" onClick={() => addToCrm(savedLeads)} disabled={!savedLeads.some((lead) => lead.phone) || addingToCrm}>{addingToCrm ? 'Добавляем…' : 'В CRM (Новые)'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать CSV</button><button className="btn btn-secondary" onClick={() => downloadXlsx(savedLeads, 'saved')} disabled={!savedLeads.length}>Скачать XLSX</button><button className="btn btn-secondary maps-clear-button" onClick={removeAllSavedCompanies} disabled={!savedLeads.length}>Убрать всё</button></div></div>
+          <div className="telegram-table-wrap"><table><thead><tr><th></th><th>Компания</th><th>Телефон</th><th>Соцсети</th><th>Сайт</th><th>Написал</th><th>Сохранено</th><th></th></tr></thead><tbody>
             {savedLeads.map((lead) => <tr key={`${lead.platform}:${lead.sourceUrl}`}>
+              <td><AgreementMark lead={lead} menuKey={agreementMenuKey} setMenuKey={setAgreementMenuKey} updating={agreementUpdating.has(`${lead.platform}:${lead.sourceUrl}`)} onSet={setAgreement} /></td>
               <td><a href={lead.sourceUrl} target="_blank" rel="noreferrer">{lead.name || 'Без названия'}</a><small className="maps-category">{lead.platform === 'yandex_maps' ? 'Яндекс Карты' : lead.platform === 'two_gis_maps' ? '2ГИС' : 'Google Карты'} · {lead.address || 'Адрес не указан'}</small></td>
               <td>{lead.phone ? <a href={`tel:${lead.phone}`}>{lead.phone}</a> : '—'}</td>
               <td><div className="maps-socials">{lead.socialLinks?.length ? lead.socialLinks.map((social) => <a key={social.url} href={social.url} target="_blank" rel="noreferrer">{social.platform}</a>) : <span className="maps-missing">Не найдены</span>}</div></td>
@@ -510,7 +614,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
               <td>{lead.savedAt ? new Date(lead.savedAt).toLocaleDateString('ru-RU') : 'Сегодня'}</td>
               <td><div className="maps-row-actions"><button className={`maps-outreach-button ${outreachSourceUrls.has(lead.sourceUrl) ? 'queued' : ''}`} onClick={() => queueForOutreach(lead)} disabled={outreachSourceUrls.has(lead.sourceUrl) || !lead.socialLinks?.some((social) => social.platform.toLowerCase() === 'telegram')}>{outreachSourceUrls.has(lead.sourceUrl) ? '✓ В рассылке' : 'В рассылку'}</button><button className="maps-remove-button" onClick={() => removeSavedCompany(lead)}>Убрать</button></div></td>
             </tr>)}
-            {!savedLeads.length ? <tr><td colSpan={7} className="telegram-empty">Сохраните нужные компании из результатов — они появятся здесь.</td></tr> : null}
+            {!savedLeads.length ? <tr><td colSpan={8} className="telegram-empty">Сохраните нужные компании из результатов — они появятся здесь.</td></tr> : null}
           </tbody></table></div>
         </section>
       </main>
