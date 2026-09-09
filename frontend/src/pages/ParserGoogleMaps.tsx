@@ -200,6 +200,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [agreementUpdating, setAgreementUpdating] = useState<Set<string>>(() => new Set());
   const [agreementMenuKey, setAgreementMenuKey] = useState('');
   const [niches, setNiches] = useState<string[]>([]);
+  const [lastImportNiche, setLastImportNiche] = useState<string | null>(null);
   const [selectedNiche, setSelectedNiche] = useState(() => localStorage.getItem(`${config.storage}_niche`) || '');
 
   useEffect(() => {
@@ -522,7 +523,9 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
       });
       const data: { error?: string; imported?: number; skipped?: number } = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не удалось добавить лидов в CRM.');
-      setCrmNotice(`В CRM добавлено: ${data.imported ?? 0}${data.skipped ? `, пропущено (дубли/без телефона): ${data.skipped}` : ''}.`);
+      const target = selectedNiche ? `в воронку «${selectedNiche}»` : 'без ниши';
+      setCrmNotice(`В CRM добавлено ${target}: ${data.imported ?? 0}${data.skipped ? `, пропущено (дубли/без телефона): ${data.skipped}` : ''}.`);
+      setLastImportNiche(selectedNiche);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось добавить лидов в CRM.');
     } finally {
@@ -590,8 +593,8 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
             <div><span className="panel-label">РЕЗУЛЬТАТ ПО УСЛОВИЯМ</span><h2>Подходящие компании</h2></div>
             <div className="result-metrics"><span><b>{leads.length}</b> найдено</span><span><b>{progress.checked}</b> проверено</span><span><b>{progress.target || targetCount}</b> цель</span><span className="maps-agreement-pct green"><b>{agreementStats(leads).greenPct}%</b> согласны</span><span className="maps-agreement-pct red"><b>{agreementStats(leads).redPct}%</b> не согласны</span></div>
           </div>
-          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><label className="maps-niche-select"><span>Ниша при добавлении</span><select className="form-input" value={selectedNiche} onChange={(event) => setSelectedNiche(event.target.value)}><option value="">Без ниши</option>{niches.map((n) => <option key={n} value={n}>{n}</option>)}</select></label><button className="btn btn-primary" onClick={() => addToCrm(leads)} disabled={!leads.some((lead) => lead.phone) || addingToCrm}>{addingToCrm ? 'Добавляем…' : 'В CRM (Новые)'}</button><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button><button className="btn btn-secondary" onClick={() => downloadXlsx(leads, provider)} disabled={!leads.length}>Скачать XLSX</button></div></div>
-          {crmNotice ? <div className="maps-saved-notice">✓ {crmNotice}</div> : null}
+          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><label className="maps-niche-select"><span>Ниша при добавлении</span><select className="form-input" value={selectedNiche} onChange={(event) => setSelectedNiche(event.target.value)}><option value="">Без ниши</option>{niches.map((n) => <option key={n} value={n}>{n}</option>)}</select></label><button className="btn btn-primary" onClick={() => addToCrm(leads)} disabled={!leads.some((lead) => lead.phone) || addingToCrm}>{addingToCrm ? 'Добавляем…' : selectedNiche ? `Все в воронку «${selectedNiche}»` : 'В CRM (Новые)'}</button><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button><button className="btn btn-secondary" onClick={() => downloadXlsx(leads, provider)} disabled={!leads.length}>Скачать XLSX</button></div></div>
+          {crmNotice ? <div className="maps-saved-notice">✓ {crmNotice}{lastImportNiche ? <button className="btn btn-ghost" style={{ marginLeft: '8px' }} onClick={() => navigate('/pipeline')}>Открыть воронку →</button> : null}</div> : null}
           {savedNotice ? <div className="maps-saved-notice">✓ {savedNotice}</div> : null}
           <div className="telegram-table-wrap"><table><thead><tr><th></th><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th><th>Написал</th><th>Действия</th></tr></thead><tbody>
             {leads.map((lead) => <tr key={lead.sourceUrl}>

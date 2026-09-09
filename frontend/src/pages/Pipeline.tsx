@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { LeadDetailPanel } from '../components/LeadDetailPanel';
 
 interface Lead {
   id: number;
@@ -8,7 +9,9 @@ interface Lead {
   status: string;
   title: string;
   city: string;
+  website?: string;
   niche?: string | null;
+  agreement_status?: 'green' | 'red' | null;
 }
 
 const COLUMNS = [
@@ -31,6 +34,16 @@ export function Pipeline() {
   const [showAddNiche, setShowAddNiche] = useState(false);
   const [newNicheText, setNewNicheText] = useState('');
   const [savingNiche, setSavingNiche] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
+
+  const selectedLead = useMemo(
+    () => leads.find(l => l.id === selectedLeadId) || null,
+    [leads, selectedLeadId]
+  );
+
+  const handleLeadUpdated = (updated: Lead) => {
+    setLeads(prev => prev.map(l => (l.id === updated.id ? { ...l, ...updated } : l)));
+  };
 
   const fetchNiches = () => {
     fetch('/api/leads/niches')
@@ -229,10 +242,11 @@ export function Pipeline() {
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
                                 className="card"
+                                onClick={() => { if (!snapshot.isDragging) setSelectedLeadId(lead.id); }}
                                 style={{
                                   padding: '16px',
                                   marginBottom: '12px',
-                                  cursor: 'grab',
+                                  cursor: 'pointer',
                                   boxShadow: snapshot.isDragging ? '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' : 'var(--shadow-sm)',
                                   ...provided.draggableProps.style
                                 }}
@@ -265,6 +279,15 @@ export function Pipeline() {
           </div>
         </DragDropContext>
       </div>
+
+      {selectedLead && (
+        <LeadDetailPanel
+          lead={selectedLead}
+          niches={niches}
+          onClose={() => setSelectedLeadId(null)}
+          onLeadUpdated={updated => handleLeadUpdated({ ...selectedLead, ...updated })}
+        />
+      )}
     </div>
   );
 }
