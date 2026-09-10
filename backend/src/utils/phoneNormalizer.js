@@ -18,12 +18,25 @@ export function listRegions() {
   return Object.keys(REGIONS);
 }
 
+// Номер в международной записи сам сообщает страну, и она важнее выбранной
+// в интерфейсе: турецкая выдача отдаёт +90 даже когда регион остался RU.
+function matchByCountryCode(digits) {
+  for (const [name, region] of Object.entries(REGIONS)) {
+    if (digits.startsWith(region.code) && digits.length === region.code.length + region.nationalLength) {
+      return name;
+    }
+  }
+  return null;
+}
+
 // Возвращает номер в формате +<код страны><национальный номер> либо null,
-// если из строки не собирается корректный номер выбранного региона.
+// если из строки не собирается корректный номер.
 export function normalizePhone(raw, region = DEFAULT_REGION) {
-  const { code, nationalLength, trunk } = getRegion(region);
   let digits = String(raw || '').replace(/[^0-9]/g, '');
   if (!digits) return null;
+
+  const explicit = String(raw || '').trim().startsWith('+') ? matchByCountryCode(digits) : null;
+  const { code, nationalLength, trunk } = getRegion(explicit || region);
 
   if (digits.startsWith(code) && digits.length === code.length + nationalLength) {
     digits = digits.slice(code.length);

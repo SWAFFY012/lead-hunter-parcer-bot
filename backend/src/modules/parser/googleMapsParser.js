@@ -260,6 +260,10 @@ export async function startGoogleMapsParsing(options) {
           io.emit('parser:log', { platform: 'google_maps', message: `[${matchedCount}/${targetCount}] Подходит: ${name}`, type: 'success' });
         }
 
+        if (isMatch && db && !cleanPhone) {
+          io.emit('parser:log', { platform: 'google_maps', message: `Не сохранён ${name}: не разобран номер «${rawPhone}»`, type: 'warn' });
+        }
+
         if (isMatch && db && cleanPhone) {
           let enrichedAdText = rating ? `Рейтинг: ${rating}. ` : '';
           if (address) enrichedAdText += `Адрес: ${address}. `;
