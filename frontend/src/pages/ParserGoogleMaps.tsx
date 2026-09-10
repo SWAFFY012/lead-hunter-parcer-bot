@@ -202,17 +202,27 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [niches, setNiches] = useState<string[]>([]);
   const [lastImportNiche, setLastImportNiche] = useState<string | null>(null);
   const [selectedNiche, setSelectedNiche] = useState(() => localStorage.getItem(`${config.storage}_niche`) || '');
+  const [owners, setOwners] = useState<string[]>([]);
+  const [selectedOwner, setSelectedOwner] = useState(() => localStorage.getItem(`${config.storage}_owner`) || '');
 
   useEffect(() => {
     fetch('/api/leads/niches')
       .then((response) => response.json())
       .then((data: { niches?: string[] }) => setNiches(data.niches || []))
       .catch(() => {});
+    fetch('/api/leads/owners')
+      .then((response) => response.json())
+      .then((data: { owners?: string[] }) => setOwners(data.owners || []))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     localStorage.setItem(`${config.storage}_niche`, selectedNiche);
   }, [config.storage, selectedNiche]);
+
+  useEffect(() => {
+    localStorage.setItem(`${config.storage}_owner`, selectedOwner);
+  }, [config.storage, selectedOwner]);
 
   useEffect(() => {
     localStorage.setItem(`${config.storage}_query`, query);
@@ -519,15 +529,16 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
       const response = await fetch('/api/leads/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leads: withPhone, niche: selectedNiche || null }),
+        body: JSON.stringify({ leads: withPhone, niche: selectedNiche || null, owner: selectedOwner || null }),
       });
       const data: { error?: string; imported?: number; updated?: number; skipped?: number } = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не удалось добавить лидов в CRM.');
       const target = selectedNiche ? `в воронку «${selectedNiche}»` : 'без ниши';
+      const who = selectedOwner ? ` на ${selectedOwner}` : '';
       const parts = [`новых: ${data.imported ?? 0}`];
-      if (data.updated) parts.push(`перенесено из других воронок: ${data.updated}`);
-      if (data.skipped) parts.push(`пропущено (уже в этой воронке / без телефона): ${data.skipped}`);
-      setCrmNotice(`В CRM ${target} — ${parts.join(', ')}.`);
+      if (data.updated) parts.push(`перенесено: ${data.updated}`);
+      if (data.skipped) parts.push(`пропущено (уже там / без телефона): ${data.skipped}`);
+      setCrmNotice(`В CRM ${target}${who} — ${parts.join(', ')}.`);
       setLastImportNiche(selectedNiche);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось добавить лидов в CRM.');
@@ -596,7 +607,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
             <div><span className="panel-label">РЕЗУЛЬТАТ ПО УСЛОВИЯМ</span><h2>Подходящие компании</h2></div>
             <div className="result-metrics"><span><b>{leads.length}</b> найдено</span><span><b>{progress.checked}</b> проверено</span><span><b>{progress.target || targetCount}</b> цель</span><span className="maps-agreement-pct green"><b>{agreementStats(leads).greenPct}%</b> согласны</span><span className="maps-agreement-pct red"><b>{agreementStats(leads).redPct}%</b> не согласны</span></div>
           </div>
-          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><label className="maps-niche-select"><span>Ниша при добавлении</span><select className="form-input" value={selectedNiche} onChange={(event) => setSelectedNiche(event.target.value)}><option value="">Без ниши</option>{niches.map((n) => <option key={n} value={n}>{n}</option>)}</select></label><button className="btn btn-primary" onClick={() => addToCrm(leads)} disabled={!leads.some((lead) => lead.phone) || addingToCrm}>{addingToCrm ? 'Добавляем…' : selectedNiche ? `Все в воронку «${selectedNiche}»` : 'В CRM (Новые)'}</button><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button><button className="btn btn-secondary" onClick={() => downloadXlsx(leads, provider)} disabled={!leads.length}>Скачать XLSX</button></div></div>
+          <div className="maps-result-actions"><span>В таблице только компании, прошедшие выбранные фильтры.</span><div className="maps-action-buttons"><label className="maps-niche-select"><span>Ниша при добавлении</span><select className="form-input" value={selectedNiche} onChange={(event) => setSelectedNiche(event.target.value)}><option value="">Без ниши</option>{niches.map((n) => <option key={n} value={n}>{n}</option>)}</select></label><label className="maps-niche-select"><span>Ответственный</span><select className="form-input" value={selectedOwner} onChange={(event) => setSelectedOwner(event.target.value)}><option value="">Без ответственного</option>{owners.map((o) => <option key={o} value={o}>{o}</option>)}</select></label><button className="btn btn-primary" onClick={() => addToCrm(leads)} disabled={!leads.some((lead) => lead.phone) || addingToCrm}>{addingToCrm ? 'Добавляем…' : selectedNiche ? `Все в «${selectedNiche}»${selectedOwner ? ` — ${selectedOwner}` : ''}` : 'В CRM (Новые)'}</button><button className="btn btn-primary" onClick={() => saveCompanies(unsavedLeads)} disabled={!unsavedLeads.length || saving}>{saving ? 'Сохраняем…' : 'Сохранить все'}</button><button className="btn btn-secondary" onClick={() => downloadCsv(leads, provider)} disabled={!leads.length}>Скачать CSV</button><button className="btn btn-secondary" onClick={() => downloadXlsx(leads, provider)} disabled={!leads.length}>Скачать XLSX</button></div></div>
           {crmNotice ? <div className="maps-saved-notice">✓ {crmNotice}{lastImportNiche ? <button className="btn btn-ghost" style={{ marginLeft: '8px' }} onClick={() => navigate('/pipeline')}>Открыть воронку →</button> : null}</div> : null}
           {savedNotice ? <div className="maps-saved-notice">✓ {savedNotice}</div> : null}
           <div className="telegram-table-wrap"><table><thead><tr><th></th><th>Компания</th><th>Телефон</th><th>Сайт</th><th>Соцсети</th><th>Адрес</th><th>Рейтинг</th><th>Написал</th><th>Действия</th></tr></thead><tbody>

@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { getDb, getSetting, setSetting } from '../db/database.js';
 
 const router = Router();
-const DEFAULT_NICHES = ['Авто', 'Стройка', 'Адвокаты'];
+const DEFAULT_NICHES = ['Авто', 'Стройка', 'Адвокаты', 'Агентство недвижимости', 'Банкротство'];
+const DEFAULT_OWNERS = ['Сергей', 'Александр'];
 
 function parseLeadTags(lead) {
   if (!lead) return lead;
@@ -17,7 +18,7 @@ function parseLeadTags(lead) {
 router.get('/', async (req, res) => {
   try {
     const db = getDb();
-    const { status, campaign_id, account_id, search, niche, limit = 100, offset = 0 } = req.query;
+    const { status, campaign_id, account_id, search, niche, owner, limit = 100, offset = 0 } = req.query;
 
     // Build dynamic query using postgres.js fragment approach
     let conditions = db`1=1`;
@@ -26,6 +27,7 @@ router.get('/', async (req, res) => {
     if (account_id) conditions = db`${conditions} AND assigned_account = ${account_id}`;
     if (search) conditions = db`${conditions} AND (name ILIKE ${'%' + search + '%'} OR phone ILIKE ${'%' + search + '%'} OR title ILIKE ${'%' + search + '%'})`;
     if (niche) conditions = db`${conditions} AND niche = ${niche}`;
+    if (owner) conditions = db`${conditions} AND owner = ${owner}`;
 
     const [{ count }] = await db`SELECT COUNT(*)::int as count FROM leads WHERE ${conditions}`;
     const leads = await db`SELECT * FROM leads WHERE ${conditions} ORDER BY created_at DESC LIMIT ${Number(limit)} OFFSET ${Number(offset)}`;
@@ -40,13 +42,13 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const db = getDb();
-    const { name, phone, city, status, note, niche } = req.body;
+    const { name, phone, city, status, note, niche, owner } = req.body;
 
     if (!phone) return res.status(400).json({ error: 'Phone is required' });
 
     const [lead] = await db`
-      INSERT INTO leads (name, phone, city, status, source, niche, created_at)
-      VALUES (${name || ''}, ${phone}, ${city || ''}, ${status || 'new'}, 'manual', ${niche || null}, NOW())
+      INSERT INTO leads (name, phone, city, status, source, niche, owner, created_at)
+      VALUES (${name || ''}, ${phone}, ${city || ''}, ${status || 'new'}, 'manual', ${niche || null}, ${owner || null}, NOW())
       ON CONFLICT (phone) DO NOTHING
       RETURNING *
     `;
@@ -70,6 +72,7 @@ router.post('/import', async (req, res) => {
     const items = Array.isArray(req.body?.leads) ? req.body.leads : [];
     if (!items.length) return res.status(400).json({ error: 'Передайте хотя бы одного лида' });
     const batchNiche = req.body?.niche || null;
+    const batchOwner = req.body?.owner || null;
 
     let imported = 0;
     let skipped = 0;
@@ -80,13 +83,14 @@ router.post('/import', async (req, res) => {
       if (!phone) { skipped++; continue; }
 
       const niche = item.niche || batchNiche;
+      const owner = item.owner || batchOwner;
 
       const [lead] = await db`
-        INSERT INTO leads (name, phone, title, city, website, source_url, platform, status, source, niche, created_at)
+        INSERT INTO leads (name, phone, title, city, website, source_url, platform, status, source, niche, owner, created_at)
         VALUES (
           ${item.name || ''}, ${phone}, ${item.title || ''}, ${item.address || ''},
           ${item.website || ''}, ${item.sourceUrl || ''}, ${item.platform || 'parser'},
-          'new', 'map_parser', ${niche}, NOW()
+          'new', 'map_parser', ${niche}, ${owner}, NOW()
         )
         ON CONFLICT (phone) DO NOTHING
         RETURNING id
@@ -97,11 +101,19 @@ router.post('/import', async (req, res) => {
         continue;
       }
 
-      // Телефон уже есть: если задана ниша — переносим существующего лида в эту воронку
-      if (niche) {
+      // Телефон уже есть: переносим существующего лида в выбранную воронку и/или на ответственного
+      if (niche || owner) {
+        const patch = {};
+        if (niche) patch.niche = niche;
+        if (owner) patch.owner = owner;
+
         const [moved] = await db`
-          UPDATE leads SET niche = ${niche}
-          WHERE phone = ${phone} AND (niche IS DISTINCT FROM ${niche})
+          UPDATE leads SET ${db(patch)}
+          WHERE phone = ${phone}
+            AND (
+              ${niche ? db`niche IS DISTINCT FROM ${niche}` : db`false`}
+              OR ${owner ? db`owner IS DISTINCT FROM ${owner}` : db`false`}
+            )
           RETURNING id
         `;
         if (moved) { updated++; continue; }
@@ -144,6 +156,40 @@ router.put('/niches', async (req, res) => {
     if (!Array.isArray(niches)) return res.status(400).json({ error: 'niches must be an array' });
     const cleaned = niches.map(n => String(n).trim()).filter(Boolean);
     await setSetting('niche_presets', JSON.stringify(cleaned));
+    res.json({ presets: cleaned });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET owners (ответственные менеджеры: сохранённые + встречающиеся в БД)
+router.get('/owners', async (_req, res) => {
+  try {
+    const db = getDb();
+    const raw = await getSetting('owner_presets');
+    let presets = [];
+    if (raw) {
+      try { presets = JSON.parse(raw); } catch { presets = []; }
+    }
+    if (!Array.isArray(presets) || presets.length === 0) presets = DEFAULT_OWNERS;
+
+    const rows = await db`SELECT DISTINCT owner FROM leads WHERE owner IS NOT NULL AND owner <> '' ORDER BY owner`;
+    const used = rows.map(r => r.owner);
+
+    const all = Array.from(new Set([...presets, ...used]));
+    res.json({ owners: all, presets });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT save owners list
+router.put('/owners', async (req, res) => {
+  try {
+    const { owners } = req.body;
+    if (!Array.isArray(owners)) return res.status(400).json({ error: 'owners must be an array' });
+    const cleaned = owners.map(o => String(o).trim()).filter(Boolean);
+    await setSetting('owner_presets', JSON.stringify(cleaned));
     res.json({ presets: cleaned });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -253,7 +299,7 @@ router.get('/:id', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     const db = getDb();
-    const { name, status, notes, tags, agreement_status, niche } = req.body;
+    const { name, status, notes, tags, agreement_status, niche, owner } = req.body;
     const updates = {};
 
     if (name !== undefined) updates.name = name;
@@ -261,6 +307,7 @@ router.patch('/:id', async (req, res) => {
     if (notes !== undefined) updates.notes = notes;
     if (tags !== undefined) updates.tags = JSON.stringify(tags);
     if (niche !== undefined) updates.niche = niche;
+    if (owner !== undefined) updates.owner = owner;
     if (agreement_status !== undefined) {
       if (agreement_status !== 'green' && agreement_status !== 'red' && agreement_status !== null) {
         return res.status(400).json({ error: 'Invalid agreement_status' });

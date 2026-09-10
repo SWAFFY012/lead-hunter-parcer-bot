@@ -20,6 +20,7 @@ interface Lead {
   ig_username?: string;
   agreement_status?: 'green' | 'red' | null;
   niche?: string | null;
+  owner?: string | null;
 }
 
 interface Message {
@@ -81,6 +82,7 @@ export function Leads() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [nicheFilter, setNicheFilter] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState('');
   const [loading, setLoading] = useState(true);
   
   const [replyText, setReplyText] = useState('');
@@ -89,12 +91,14 @@ export function Leads() {
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newLead, setNewLead] = useState({ name: '', phone: '', city: '', status: 'contact', note: '', niche: '' });
+  const [newLead, setNewLead] = useState({ name: '', phone: '', city: '', status: 'contact', note: '', niche: '', owner: '' });
   const [addingLead, setAddingLead] = useState(false);
   const [niches, setNiches] = useState<string[]>([]);
+  const [owners, setOwners] = useState<string[]>([]);
 
   useEffect(() => {
     fetch('/api/leads/niches').then(r => r.json()).then(d => setNiches(d.niches || [])).catch(() => {});
+    fetch('/api/leads/owners').then(r => r.json()).then(d => setOwners(d.owners || [])).catch(() => {});
   }, []);
 
   const [leadNotes, setLeadNotes] = useState<LeadNote[]>([]);
@@ -170,6 +174,7 @@ export function Leads() {
       if (search) qs.append('search', search);
       if (statusFilter) qs.append('status', statusFilter);
       if (nicheFilter) qs.append('niche', nicheFilter);
+      if (ownerFilter) qs.append('owner', ownerFilter);
       qs.append('limit', '1000000');
 
       const res = await fetch(`/api/leads?${qs.toString()}`);
@@ -184,7 +189,7 @@ export function Leads() {
 
   useEffect(() => {
     fetchLeads();
-  }, [search, statusFilter, nicheFilter]);
+  }, [search, statusFilter, nicheFilter, ownerFilter]);
 
   useEffect(() => {
     const leadId = searchParams.get('lead_id');
@@ -390,7 +395,7 @@ export function Leads() {
       });
       if (res.ok) {
         setShowAddModal(false);
-        setNewLead({ name: '', phone: '', city: '', status: 'new', note: '', niche: '' });
+        setNewLead({ name: '', phone: '', city: '', status: 'new', note: '', niche: '', owner: '' });
         fetchLeads();
       } else {
         const err = await res.json();
@@ -442,6 +447,28 @@ export function Leads() {
     } catch (err) {
       console.error(err);
       alert('Ошибка сети при смене статуса');
+    }
+  };
+
+  const handleOwnerChange = async (newOwner: string) => {
+    if (!selectedLead) return;
+    try {
+      const res = await fetch(`/api/leads/${selectedLead.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner: newOwner || null })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setSelectedLead(prev => prev ? { ...prev, owner: updated.owner } : null);
+        setLeads(prev => prev.map(l => l.id === updated.id ? { ...l, owner: updated.owner } : l));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Ошибка смены ответственного: ${err.error || res.status}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка сети при смене ответственного');
     }
   };
 
@@ -588,7 +615,13 @@ export function Leads() {
               <option key={n} value={n}>{n}</option>
             ))}
           </select>
-          <button className="btn btn-ghost" onClick={() => { setSearch(''); setStatusFilter(''); setNicheFilter(''); }}>Сбросить</button>
+          <select className="form-select" style={{ maxWidth: '180px' }} value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}>
+            <option value="">Все ответственные</option>
+            {owners.map(o => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+          <button className="btn btn-ghost" onClick={() => { setSearch(''); setStatusFilter(''); setNicheFilter(''); setOwnerFilter(''); }}>Сбросить</button>
         </div>
 
         {/* Data Table */}
@@ -602,6 +635,7 @@ export function Leads() {
                   <th>Источник</th>
                   <th>Дата</th>
                   <th>Статус</th>
+                  <th>Ответственный</th>
                   <th>Аккаунт</th>
                   <th></th>
                 </tr>
@@ -609,7 +643,7 @@ export function Leads() {
               <tbody>
                 {loading && leads.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)' }}>Загрузка...</td>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)' }}>Загрузка...</td>
                   </tr>
                 ) : leads.map(lead => (
                   <tr 
@@ -664,6 +698,11 @@ export function Leads() {
                       </span>
                     </td>
                     <td>
+                      {lead.owner
+                        ? <span className="badge" style={{ backgroundColor: 'var(--color-surface-alt)', color: 'var(--color-text-secondary)' }}>{lead.owner}</span>
+                        : <span className="text-sm text-tertiary">-</span>}
+                    </td>
+                    <td>
                       <span className="mono text-sm text-secondary">{lead.assigned_account || '-'}</span>
                     </td>
                     <td>
@@ -680,7 +719,7 @@ export function Leads() {
                 ))}
                 {!loading && leads.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)' }}>
                       Лиды не найдены
                     </td>
                   </tr>
@@ -800,6 +839,17 @@ export function Leads() {
                   <option value="">Без ниши</option>
                   {niches.map(n => (
                     <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Owner block */}
+              <div>
+                <label className="form-label">Ответственный</label>
+                <select className="form-select" value={selectedLead.owner || ''} onChange={e => handleOwnerChange(e.target.value)}>
+                  <option value="">Без ответственного</option>
+                  {owners.map(o => (
+                    <option key={o} value={o}>{o}</option>
                   ))}
                 </select>
               </div>
@@ -1175,6 +1225,13 @@ export function Leads() {
                 <select className="form-select" value={newLead.niche} onChange={e => setNewLead({ ...newLead, niche: e.target.value })}>
                   <option value="">Без ниши</option>
                   {niches.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Ответственный</label>
+                <select className="form-select" value={newLead.owner} onChange={e => setNewLead({ ...newLead, owner: e.target.value })}>
+                  <option value="">Без ответственного</option>
+                  {owners.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
               <div>

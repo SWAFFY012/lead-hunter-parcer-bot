@@ -106,6 +106,14 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_leads_niche ON leads(niche)
     `;
 
+    // Ответственный менеджер за лида (Сергей/Александр)
+    await db`
+      ALTER TABLE leads ADD COLUMN IF NOT EXISTS owner TEXT
+    `;
+    await db`
+      CREATE INDEX IF NOT EXISTS idx_leads_owner ON leads(owner)
+    `;
+
     console.log('[DB] Migrations applied successfully');
   } catch (err) {
     // Constraint may already be correct — safe to ignore
