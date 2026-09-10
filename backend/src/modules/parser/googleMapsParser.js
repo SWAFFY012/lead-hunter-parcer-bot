@@ -7,7 +7,7 @@ import { systemLog } from '../../utils/logger.js';
 import { getProfile, buildContextOptions, applyFingerprintScripts } from '../fingerprint/profileManager.js';
 import { collectSocialLinks, crawlWebsiteSocialLinks, mergeSocialLinks } from '../../utils/socialExtractor.js';
 import { matchesMapLeadFilters, normalizeMapLeadFilters, shouldCrawlMapLeadWebsiteSocials } from '../../utils/mapLeadFilter.js';
-import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
+import { isMapLeadAlreadyTaken, rememberMapLead } from '../../utils/mapLeadCache.js';
 import { normalizePhone, DEFAULT_REGION } from '../../utils/phoneNormalizer.js';
 import {
   finishMapParserRun,
@@ -164,8 +164,7 @@ export async function startGoogleMapsParsing(options) {
         }
 
         try {
-          const cachedLead = await getCachedMapLead('google_maps', placeUrl);
-          if (cachedLead) {
+          if (await isMapLeadAlreadyTaken('google_maps', placeUrl)) {
             duplicatesSkipped++;
             continue;
           }
@@ -309,15 +308,27 @@ export async function startGoogleMapsParsing(options) {
         io.emit('parser:progress', progress);
       }
 
-      if (matchedCount >= targetCount || consecutiveEmptyScrolls >= 3) break;
-      const scrolled = await page.evaluate(() => {
+      if (matchedCount >= targetCount || consecutiveEmptyScrolls >= 6) break;
+
+      // Лента догружает следующую порцию не мгновенно: ждём, пока вырастет
+      // высота, иначе пустой проход засчитывается там, где выдача не кончилась.
+      const scrolled = await page.evaluate(async () => {
         const feed = document.querySelector('[role="feed"]');
         if (!feed) return false;
+        const before = feed.scrollHeight;
+        const seen = feed.querySelectorAll('a[href*="/maps/place/"]').length;
         feed.scrollTop = feed.scrollHeight;
+        for (let i = 0; i < 20; i++) {
+          await new Promise((r) => setTimeout(r, 400));
+          const grew = feed.scrollHeight > before
+            || feed.querySelectorAll('a[href*="/maps/place/"]').length > seen;
+          if (grew) return true;
+          feed.scrollTop = feed.scrollHeight;
+        }
         return true;
       });
       if (!scrolled) break;
-      await sleep(1300, 2300);
+      await sleep(900, 1600);
     }
 
     const finishType = matchedCount >= targetCount ? 'success' : 'warn';

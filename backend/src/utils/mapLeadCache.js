@@ -39,6 +39,15 @@ export async function getCachedMapLead(platform, sourceUrl) {
   return cache.leads[cacheKey(platform, sourceUrl)]?.lead || null;
 }
 
+// Повторный обход пропускает только те карточки, что уже попали в CRM или в
+// сохранённые. Просто просмотренная компания могла не подойти под прошлые
+// фильтры — при новых условиях её нужно проверить заново.
+export async function isMapLeadAlreadyTaken(platform, sourceUrl) {
+  const cache = await getCache();
+  const entry = cache.leads[cacheKey(platform, sourceUrl)];
+  return Boolean(entry?.savedAt || entry?.contactedAt);
+}
+
 export async function getCachedMapLeadState(platform, sourceUrl) {
   const cache = await getCache();
   const entry = cache.leads[cacheKey(platform, sourceUrl)];
