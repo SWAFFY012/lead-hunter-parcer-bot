@@ -84,6 +84,25 @@ function formatTime(start: string | null, end: string | null): string {
   return a || b || '';
 }
 
+// created_at — полноценный timestamp, показываем дату и время создания заметки
+function formatNoteDate(created: string): string {
+  const d = new Date(created);
+  if (Number.isNaN(d.getTime())) return '';
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((day.getTime() - today.getTime()) / 86400000);
+
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (days === 0) return `Сегодня, ${time}`;
+  if (days === -1) return `Вчера, ${time}`;
+
+  const base = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const year = d.getFullYear() !== today.getFullYear() ? ` ${d.getFullYear()}` : '';
+  return `${base}${year}, ${time}`;
+}
+
 function isOverdue(due: string): boolean {
   const d = parseDueDate(due);
   if (!d) return false;
@@ -562,7 +581,12 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
                   </>
                 ) : (
                   <>
-                    <div style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap' }} className="text-sm">{note.text}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ whiteSpace: 'pre-wrap' }} className="text-sm">{note.text}</div>
+                      <div className="text-xs text-secondary" style={{ marginTop: '4px' }}>
+                        {formatNoteDate(note.created_at)}
+                      </div>
+                    </div>
                     <button className="btn btn-ghost" onClick={() => { setEditingNoteId(note.id); setEditingNoteText(note.text); }}>✎</button>
                     <button className="btn btn-ghost" onClick={() => handleDeleteNote(note.id)}>✕</button>
                   </>
