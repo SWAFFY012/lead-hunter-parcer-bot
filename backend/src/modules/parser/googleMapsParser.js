@@ -66,14 +66,18 @@ export async function startGoogleMapsParsing(options) {
     
     io.emit('parser:log', { platform: 'google_maps', message: 'Запускаем браузер Google Карт…', type: 'info' });
     
+    // На сервере нет X-сервера, окно браузера показать негде.
+    // PARSER_HEADLESS=false включает видимый режим на локальной машине.
     parserBrowser = await playwrightExtra.launch({
-      headless: false,
+      headless: process.env.PARSER_HEADLESS !== 'false',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-blink-features=AutomationControlled',
         '--disable-infobars',
         '--window-size=1280,800',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
         '--disable-dev-shm-usage',
       ]
     });
