@@ -433,7 +433,6 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
                 {lead.platform === 'yandex_maps' ? '📍 Яндекс.Карты' : '📍 Источник'}
               </a>
             )}
-            {lead.phone && <a href={`tel:${lead.phone}`}>Позвонить</a>}
           </div>
 
           <div className="lead-panel-section">
