@@ -11,6 +11,9 @@ interface Lead {
   city: string;
   website?: string;
   niche?: string | null;
+  owner?: string | null;
+  source_url?: string | null;
+  platform?: string | null;
   agreement_status?: 'green' | 'red' | null;
 }
 
@@ -30,6 +33,7 @@ export function Pipeline() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [niches, setNiches] = useState<string[]>([]);
+  const [owners, setOwners] = useState<string[]>([]);
   const [activeNiche, setActiveNiche] = useState<string>(ALL_NICHES);
   const [showAddNiche, setShowAddNiche] = useState(false);
   const [newNicheText, setNewNicheText] = useState('');
@@ -60,6 +64,13 @@ export function Pipeline() {
       .catch(e => console.error(e));
   };
 
+  const fetchOwners = () => {
+    fetch('/api/leads/owners')
+      .then(r => r.json())
+      .then(d => setOwners(d.owners || []))
+      .catch(e => console.error(e));
+  };
+
   const fetchLeads = () => {
     setLoading(true);
     const qs = activeNiche === ALL_NICHES ? '' : `&niche=${encodeURIComponent(activeNiche)}`;
@@ -78,6 +89,7 @@ export function Pipeline() {
 
   useEffect(() => {
     fetchNiches();
+    fetchOwners();
   }, []);
 
   useEffect(() => {
@@ -303,6 +315,8 @@ export function Pipeline() {
         <LeadDetailPanel
           lead={selectedLead}
           niches={niches}
+          owners={owners}
+          onOwnersChanged={setOwners}
           onClose={() => setSelectedLeadId(null)}
           onLeadUpdated={updated => handleLeadUpdated({ ...selectedLead, ...updated })}
         />

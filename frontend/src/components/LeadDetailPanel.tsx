@@ -9,6 +9,9 @@ export interface PanelLead {
   city?: string;
   website?: string;
   niche?: string | null;
+  owner?: string | null;
+  source_url?: string | null;
+  platform?: string | null;
   agreement_status?: 'green' | 'red' | null;
 }
 
@@ -49,11 +52,15 @@ const TASK_TYPE_COLORS: Record<string, string> = { call: '#3b82f6', meeting: '#f
 interface Props {
   lead: PanelLead;
   niches: string[];
+  owners: string[];
   onClose: () => void;
   onLeadUpdated: (lead: PanelLead) => void;
+  onOwnersChanged?: (owners: string[]) => void;
 }
 
-export function LeadDetailPanel({ lead, niches, onClose, onLeadUpdated }: Props) {
+const NEW_OWNER = '__new__';
+
+export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, onOwnersChanged }: Props) {
   const [notes, setNotes] = useState<LeadNote[]>([]);
   const [newNoteText, setNewNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -67,6 +74,10 @@ export function LeadDetailPanel({ lead, niches, onClose, onLeadUpdated }: Props)
 
   const [editingName, setEditingName] = useState(false);
   const [nameText, setNameText] = useState(lead.name || '');
+
+  const [addingOwner, setAddingOwner] = useState(false);
+  const [newOwnerText, setNewOwnerText] = useState('');
+  const [savingOwner, setSavingOwner] = useState(false);
 
   const fetchNotes = (leadId: number) => {
     fetch(`/api/leads/${leadId}/notes`)
@@ -85,6 +96,8 @@ export function LeadDetailPanel({ lead, niches, onClose, onLeadUpdated }: Props)
   useEffect(() => {
     setNameText(lead.name || '');
     setEditingName(false);
+    setAddingOwner(false);
+    setNewOwnerText('');
     fetchNotes(lead.id);
     fetchTasks(lead.id);
   }, [lead.id]);
@@ -120,6 +133,34 @@ export function LeadDetailPanel({ lead, niches, onClose, onLeadUpdated }: Props)
     setEditingName(false);
     if (value === (lead.name || '')) return;
     await patchLead({ name: value });
+  };
+
+  const handleAddOwner = async () => {
+    const value = newOwnerText.trim();
+    if (!value || savingOwner) return;
+    setSavingOwner(true);
+    try {
+      const next = Array.from(new Set([...owners, value]));
+      const res = await fetch('/api/leads/owners', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owners: next })
+      });
+      if (res.ok) {
+        onOwnersChanged?.(next);
+        setNewOwnerText('');
+        setAddingOwner(false);
+        await patchLead({ owner: value });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Ошибка: ${err.error || res.status}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка сети');
+    } finally {
+      setSavingOwner(false);
+    }
   };
 
   const handleAddTask = async () => {
@@ -287,12 +328,67 @@ export function LeadDetailPanel({ lead, niches, onClose, onLeadUpdated }: Props)
                 ))}
               </select>
             </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label className="form-label">Ответственный</label>
+              {addingOwner ? (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    className="form-input"
+                    autoFocus
+                    placeholder="Имя ответственного"
+                    value={newOwnerText}
+                    onChange={e => setNewOwnerText(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleAddOwner();
+                      if (e.key === 'Escape') { setAddingOwner(false); setNewOwnerText(''); }
+                    }}
+                  />
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleAddOwner}
+                    disabled={!newOwnerText.trim() || savingOwner}
+                  >
+                    {savingOwner ? '...' : 'OK'}
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => { setAddingOwner(false); setNewOwnerText(''); }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <select
+                  className="form-select"
+                  value={lead.owner || ''}
+                  onChange={e => {
+                    if (e.target.value === NEW_OWNER) { setAddingOwner(true); return; }
+                    patchLead({ owner: e.target.value || null });
+                  }}
+                >
+                  <option value="">Без ответственного</option>
+                  {owners.map(o => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                  {lead.owner && !owners.includes(lead.owner) && (
+                    <option value={lead.owner}>{lead.owner}</option>
+                  )}
+                  <option value={NEW_OWNER}>+ Добавить человека…</option>
+                </select>
+              )}
+            </div>
           </div>
 
           <div className="lead-panel-meta">
             {lead.city && <span>{lead.city}</span>}
             {lead.website && (
               <a href={lead.website} target="_blank" rel="noreferrer">{lead.website}</a>
+            )}
+            {lead.source_url && (
+              <a href={lead.source_url} target="_blank" rel="noreferrer">
+                {lead.platform === 'yandex_maps' ? '📍 Яндекс.Карты' : '📍 Источник'}
+              </a>
             )}
             {lead.phone && <a href={`tel:${lead.phone}`}>Позвонить</a>}
           </div>
