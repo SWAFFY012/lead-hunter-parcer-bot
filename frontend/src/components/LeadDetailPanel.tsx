@@ -46,8 +46,51 @@ const STATUS_LABELS: Record<string, string> = {
   deal: 'Сделка'
 };
 
-const TASK_TYPE_LABELS: Record<string, string> = { call: 'Связаться', meeting: 'Встреча' };
+const TASK_TYPE_LABELS: Record<string, string> = { call: 'Звонок', meeting: 'Встреча' };
 const TASK_TYPE_COLORS: Record<string, string> = { call: '#3b82f6', meeting: '#f59e0b' };
+
+const WEEKDAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+// due_date приходит как DATE, но драйвер отдаёт ISO-строку со временем — берём только дату
+function parseDueDate(due: string): Date | null {
+  const ymd = String(due || '').slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
+function formatDueDate(due: string): string {
+  const d = parseDueDate(due);
+  if (!d) return due;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((d.getTime() - today.getTime()) / 86400000);
+
+  const base = `${d.getDate()} ${MONTHS[d.getMonth()]}, ${WEEKDAYS[d.getDay()]}`;
+  if (days === 0) return `Сегодня, ${base}`;
+  if (days === 1) return `Завтра, ${base}`;
+  if (days === -1) return `Вчера, ${base}`;
+  if (d.getFullYear() !== today.getFullYear()) return `${base} ${d.getFullYear()}`;
+  return base;
+}
+
+function formatTime(start: string | null, end: string | null): string {
+  const cut = (t: string | null) => (t ? String(t).slice(0, 5) : '');
+  const a = cut(start);
+  const b = cut(end);
+  if (a && b) return `${a}–${b}`;
+  return a || b || '';
+}
+
+function isOverdue(due: string): boolean {
+  const d = parseDueDate(due);
+  if (!d) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d.getTime() < today.getTime();
+}
 
 interface Props {
   lead: PanelLead;
@@ -408,7 +451,7 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
                   value={newTask.type}
                   onChange={e => setNewTask({ ...newTask, type: e.target.value })}
                 >
-                  <option value="call">Связаться</option>
+                  <option value="call">Звонок</option>
                   <option value="meeting">Встреча</option>
                 </select>
                 <input
@@ -432,7 +475,7 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
                 <input
                   className="form-input"
                   style={{ gridColumn: '1 / -1' }}
-                  placeholder="Комментарий"
+                  placeholder="Комментарий (необязательно)"
                   value={newTask.note}
                   onChange={e => setNewTask({ ...newTask, note: e.target.value })}
                 />
@@ -460,13 +503,22 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
                   {TASK_TYPE_LABELS[task.type]}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="text-sm" style={{ textDecoration: task.status === 'done' ? 'line-through' : undefined }}>
-                    {task.due_date}
-                    {task.time_start ? ` ${task.time_start}` : ''}
-                    {task.time_end ? `–${task.time_end}` : ''}
+                  <div
+                    className="text-sm"
+                    style={{
+                      textDecoration: task.status === 'done' ? 'line-through' : undefined,
+                      color: task.status === 'pending' && isOverdue(task.due_date) ? 'var(--color-error)' : undefined
+                    }}
+                  >
+                    {formatDueDate(task.due_date)}
+                    {formatTime(task.time_start, task.time_end) && (
+                      <span style={{ marginLeft: '8px', fontWeight: 600 }}>
+                        {formatTime(task.time_start, task.time_end)}
+                      </span>
+                    )}
                   </div>
-                  {task.note && <div className="text-xs text-secondary">{task.note}</div>}
-                  {task.result && <div className="text-xs text-secondary">Результат: {task.result}</div>}
+                  {task.note && <div className="text-xs text-secondary" style={{ marginTop: '2px' }}>{task.note}</div>}
+                  {task.result && <div className="text-xs text-secondary" style={{ marginTop: '2px' }}>Результат: {task.result}</div>}
                 </div>
                 {task.status === 'pending' && (
                   <button className="btn btn-ghost" onClick={() => handleMarkTaskDone(task)}>✓</button>
