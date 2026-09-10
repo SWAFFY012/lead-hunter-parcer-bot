@@ -200,6 +200,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [crmNotice, setCrmNotice] = useState('');
   const [agreementUpdating, setAgreementUpdating] = useState<Set<string>>(() => new Set());
   const [agreementMenuKey, setAgreementMenuKey] = useState('');
+  const [region, setRegion] = useState(() => localStorage.getItem(`${config.storage}_region`) || 'RU');
   const [niches, setNiches] = useState<string[]>([]);
   const [lastImportNiche, setLastImportNiche] = useState<string | null>(null);
   const [selectedNiche, setSelectedNiche] = useState(() => localStorage.getItem(`${config.storage}_niche`) || '');
@@ -220,6 +221,10 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   useEffect(() => {
     localStorage.setItem(`${config.storage}_niche`, selectedNiche);
   }, [config.storage, selectedNiche]);
+
+  useEffect(() => {
+    localStorage.setItem(`${config.storage}_region`, region);
+  }, [config.storage, region]);
 
   useEffect(() => {
     localStorage.setItem(`${config.storage}_owner`, selectedOwner);
@@ -345,6 +350,8 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
         body: JSON.stringify({
           query,
           targetCount,
+          region,
+          niche: selectedNiche || null,
           filters: {
             website: websiteFilter,
             phone: phoneFilter,
@@ -532,7 +539,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
       const response = await fetch('/api/leads/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leads: withPhone, niche: selectedNiche || null, owner: selectedOwner || null }),
+        body: JSON.stringify({ leads: withPhone, niche: selectedNiche || null, owner: selectedOwner || null, region }),
       });
       const data: { error?: string; imported?: number; updated?: number; skipped?: number } = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не удалось добавить лидов в CRM.');
@@ -598,7 +605,10 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
               <label>Telegram / WhatsApp / Instagram<select value={socialFilter} onChange={(event) => setSocialFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть хотя бы одна</option><option value="without">Нет ни одной</option></select></label>
               <label>Telegram<select value={socialPlatformFilter} onChange={(event) => setSocialPlatformFilter(event.target.value as SocialPlatformFilter)} disabled={loading}><option value="all">Неважно</option><option value="telegram">Только с Telegram</option></select></label>
               <label>Рейтинг<select value={minRatingFilter} onChange={(event) => setMinRatingFilter(event.target.value)} disabled={loading}><option value="0">Неважно</option><option value="3">От 3.0 ★</option><option value="3.5">От 3.5 ★</option><option value="4">От 4.0 ★</option><option value="4.5">От 4.5 ★</option></select></label>
+              <label>Страна<select value={region} onChange={(event) => setRegion(event.target.value)} disabled={loading}><option value="RU">Россия (+7)</option><option value="TR">Турция (+90)</option></select></label>
+              <label>Воронка<select value={selectedNiche} onChange={(event) => setSelectedNiche(event.target.value)} disabled={loading}><option value="">Без ниши</option>{niches.map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
             </div>
+            <div className="maps-server-filter-note"><b>Страна и воронка задаются до запуска</b><span>Найденные компании сразу сохраняются в выбранную воронку, номер приводится к международному формату.</span></div>
 
             {loading ? <button type="button" className="btn btn-secondary maps-start" onClick={stopParsing}>Остановить сбор</button> : <button className="btn btn-primary maps-start">Найти {targetCount} {companyWord(targetCount)}</button>}
             {loading ? <div className="maps-progress"><span style={{ width: `${progressPercent}%` }} /><small>Подходит {progress.matched} из {progress.target} · проверено карточек: {progress.checked}</small></div> : null}

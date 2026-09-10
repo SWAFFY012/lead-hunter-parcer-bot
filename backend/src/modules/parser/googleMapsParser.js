@@ -8,6 +8,7 @@ import { getProfile, buildContextOptions, applyFingerprintScripts } from '../fin
 import { collectSocialLinks, crawlWebsiteSocialLinks, mergeSocialLinks } from '../../utils/socialExtractor.js';
 import { matchesMapLeadFilters, normalizeMapLeadFilters, shouldCrawlMapLeadWebsiteSocials } from '../../utils/mapLeadFilter.js';
 import { getCachedMapLead, rememberMapLead } from '../../utils/mapLeadCache.js';
+import { normalizePhone, DEFAULT_REGION } from '../../utils/phoneNormalizer.js';
 import {
   finishMapParserRun,
   getMapParserRun,
@@ -30,7 +31,16 @@ function sleep(min, max) {
 }
 
 export async function startGoogleMapsParsing(options) {
-  const { url, query = url, targetCount = 30, campaignId = null, profileId = null, taskId = null } = options;
+  const {
+    url,
+    query = url,
+    targetCount = 30,
+    campaignId = null,
+    profileId = null,
+    taskId = null,
+    region = DEFAULT_REGION,
+    niche = null,
+  } = options;
   const filters = normalizeMapLeadFilters(options.filters);
   if (parserRunning) {
     io.emit('parser:log', { platform: 'google_maps', message: 'Парсер Google Maps уже запущен', type: 'warn' });
@@ -39,7 +49,7 @@ export async function startGoogleMapsParsing(options) {
 
   parserRunning = true;
   shouldStop = false;
-  startMapParserRun(PLATFORM, { query, targetCount, filters });
+  startMapParserRun(PLATFORM, { query, targetCount, filters, region, niche });
   io.emit('parser:started', { platform: 'google_maps', targetCount, filters });
   io.emit('parser:status', { isRunning: true, platform: 'google_maps' });
   systemLog('parser', 'info', `Starting Google Maps parser for URL: ${url}`);
@@ -223,7 +233,7 @@ export async function startGoogleMapsParsing(options) {
           : cardSocialLinks;
         
         const rawPhone = phone || '';
-        const cleanPhone = rawPhone.replace(/\D/g, '');
+        const cleanPhone = normalizePhone(rawPhone, region);
         const lead = {
           name,
           title,
@@ -246,7 +256,7 @@ export async function startGoogleMapsParsing(options) {
           io.emit('parser:log', { platform: 'google_maps', message: `[${matchedCount}/${targetCount}] Подходит: ${name}`, type: 'success' });
         }
 
-        if (isMatch && db && cleanPhone.length >= 10) {
+        if (isMatch && db && cleanPhone) {
           let enrichedAdText = rating ? `Рейтинг: ${rating}. ` : '';
           if (address) enrichedAdText += `Адрес: ${address}. `;
           if (!isClaimed) enrichedAdText += 'Статус: карточка не подтверждена владельцем. ';
@@ -255,8 +265,8 @@ export async function startGoogleMapsParsing(options) {
 
           try {
             await db`
-              INSERT INTO leads (phone, name, title, ad_text, source_url, website, platform, campaign_id, status)
-              VALUES (${cleanPhone}, ${name}, ${title}, ${ad_text}, ${placeUrl}, ${website}, 'google_maps', ${campaignId}, 'new')
+              INSERT INTO leads (phone, name, title, ad_text, city, source_url, website, platform, campaign_id, status, source, niche)
+              VALUES (${cleanPhone}, ${name}, ${title}, ${ad_text}, ${address || ''}, ${placeUrl}, ${website}, 'google_maps', ${campaignId}, 'new', 'map_parser', ${niche})
               ON CONFLICT (phone) DO NOTHING
             `;
             io.emit('parser:log', { platform: 'google_maps', message: `Сохранено в CRM: ${name} (${cleanPhone})`, type: 'success' });

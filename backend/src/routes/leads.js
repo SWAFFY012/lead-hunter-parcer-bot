@@ -73,13 +73,15 @@ router.post('/import', async (req, res) => {
     if (!items.length) return res.status(400).json({ error: 'Передайте хотя бы одного лида' });
     const batchNiche = req.body?.niche || null;
     const batchOwner = req.body?.owner || null;
+    const batchRegion = req.body?.region || DEFAULT_REGION;
 
     let imported = 0;
     let skipped = 0;
     let updated = 0;
 
     for (const item of items) {
-      const phone = String(item?.phone || '').trim();
+      // Номер приводим к E.164: из Карт он приходит в местном формате.
+      const phone = normalizePhone(item?.phone, item?.region || batchRegion);
       if (!phone) { skipped++; continue; }
 
       const niche = item.niche || batchNiche;
@@ -426,6 +428,7 @@ router.post('/:id/reply', async (req, res) => {
 });
 
 import { generateOllamaText } from '../modules/ai/ollamaClient.js';
+import { normalizePhone, DEFAULT_REGION } from '../utils/phoneNormalizer.js';
 
 // POST generate AI reply based on chat history
 router.post('/:id/generate_reply', async (req, res) => {
