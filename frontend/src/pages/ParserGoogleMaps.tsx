@@ -183,6 +183,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [phoneFilter, setPhoneFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_phone`) as PresenceFilter) || 'all');
   const [socialFilter, setSocialFilter] = useState<PresenceFilter>(() => (localStorage.getItem(`${config.storage}_socials`) as PresenceFilter) || 'all');
   const [socialPlatformFilter, setSocialPlatformFilter] = useState<SocialPlatformFilter>(() => (localStorage.getItem(`${config.storage}_social_platform`) as SocialPlatformFilter) || 'all');
+  const [minRatingFilter, setMinRatingFilter] = useState(() => localStorage.getItem(`${config.storage}_min_rating`) || '0');
   const [leads, setLeads] = useState<MapLead[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -231,7 +232,8 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
     localStorage.setItem(`${config.storage}_phone`, phoneFilter);
     localStorage.setItem(`${config.storage}_socials`, socialFilter);
     localStorage.setItem(`${config.storage}_social_platform`, socialPlatformFilter);
-  }, [config.storage, phoneFilter, query, socialFilter, socialPlatformFilter, targetCount, websiteFilter]);
+    localStorage.setItem(`${config.storage}_min_rating`, minRatingFilter);
+  }, [config.storage, minRatingFilter, phoneFilter, query, socialFilter, socialPlatformFilter, targetCount, websiteFilter]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -348,6 +350,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
             phone: phoneFilter,
             socials: socialFilter,
             socialPlatform: socialPlatformFilter,
+            minRating: Number(minRatingFilter) || 0,
           },
         }),
       });
@@ -594,6 +597,7 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
               <label>Телефон<select value={phoneFilter} onChange={(event) => setPhoneFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть телефон</option><option value="without">Нет телефона</option></select></label>
               <label>Telegram / WhatsApp / Instagram<select value={socialFilter} onChange={(event) => setSocialFilter(event.target.value as PresenceFilter)} disabled={loading}><option value="all">Неважно</option><option value="with">Есть хотя бы одна</option><option value="without">Нет ни одной</option></select></label>
               <label>Telegram<select value={socialPlatformFilter} onChange={(event) => setSocialPlatformFilter(event.target.value as SocialPlatformFilter)} disabled={loading}><option value="all">Неважно</option><option value="telegram">Только с Telegram</option></select></label>
+              <label>Рейтинг<select value={minRatingFilter} onChange={(event) => setMinRatingFilter(event.target.value)} disabled={loading}><option value="0">Неважно</option><option value="3">От 3.0 ★</option><option value="3.5">От 3.5 ★</option><option value="4">От 4.0 ★</option><option value="4.5">От 4.5 ★</option></select></label>
             </div>
 
             {loading ? <button type="button" className="btn btn-secondary maps-start" onClick={stopParsing}>Остановить сбор</button> : <button className="btn btn-primary maps-start">Найти {targetCount} {companyWord(targetCount)}</button>}
