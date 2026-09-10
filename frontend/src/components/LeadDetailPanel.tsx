@@ -112,7 +112,7 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
 
   const [tasks, setTasks] = useState<LeadTask[]>([]);
   const [showTaskForm, setShowTaskForm] = useState(false);
-  const [newTask, setNewTask] = useState({ type: 'call', due_date: '', time_start: '', time_end: '', note: '' });
+  const [newTask, setNewTask] = useState({ type: 'call', due_date: '', time_start: '', note: '' });
   const [addingTask, setAddingTask] = useState(false);
 
   const [editingName, setEditingName] = useState(false);
@@ -216,7 +216,7 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
         body: JSON.stringify({ lead_id: lead.id, ...newTask })
       });
       if (res.ok) {
-        setNewTask({ type: 'call', due_date: '', time_start: '', time_end: '', note: '' });
+        setNewTask({ type: 'call', due_date: '', time_start: '', note: '' });
         setShowTaskForm(false);
         fetchTasks(lead.id);
       } else {
@@ -462,15 +462,10 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
                 />
                 <input
                   className="form-input"
+                  style={{ gridColumn: '1 / -1' }}
                   type="time"
                   value={newTask.time_start}
                   onChange={e => setNewTask({ ...newTask, time_start: e.target.value })}
-                />
-                <input
-                  className="form-input"
-                  type="time"
-                  value={newTask.time_end}
-                  onChange={e => setNewTask({ ...newTask, time_end: e.target.value })}
                 />
                 <input
                   className="form-input"
