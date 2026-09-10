@@ -57,6 +57,12 @@ export function Pipeline() {
     setLeads(prev => prev.map(l => (l.id === updated.id ? { ...l, ...updated } : l)));
   };
 
+  const handleLeadDeleted = (leadId: number) => {
+    setLeads(prev => prev.filter(l => l.id !== leadId));
+    setTotal(t => Math.max(0, t - 1));
+    setSelectedLeadId(null);
+  };
+
   const fetchNiches = () => {
     fetch('/api/leads/niches')
       .then(r => r.json())
@@ -317,6 +323,7 @@ export function Pipeline() {
           niches={niches}
           owners={owners}
           onOwnersChanged={setOwners}
+          onLeadDeleted={handleLeadDeleted}
           onClose={() => setSelectedLeadId(null)}
           onLeadUpdated={updated => handleLeadUpdated({ ...selectedLead, ...updated })}
         />

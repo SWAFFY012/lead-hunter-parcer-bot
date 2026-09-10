@@ -118,11 +118,12 @@ interface Props {
   onClose: () => void;
   onLeadUpdated: (lead: PanelLead) => void;
   onOwnersChanged?: (owners: string[]) => void;
+  onLeadDeleted?: (leadId: number) => void;
 }
 
 const NEW_OWNER = '__new__';
 
-export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, onOwnersChanged }: Props) {
+export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, onOwnersChanged, onLeadDeleted }: Props) {
   const [notes, setNotes] = useState<LeadNote[]>([]);
   const [newNoteText, setNewNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -136,6 +137,8 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
 
   const [editingName, setEditingName] = useState(false);
   const [nameText, setNameText] = useState(lead.name || '');
+
+  const [deletingLead, setDeletingLead] = useState(false);
 
   const [addingOwner, setAddingOwner] = useState(false);
   const [newOwnerText, setNewOwnerText] = useState('');
@@ -195,6 +198,28 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
     setEditingName(false);
     if (value === (lead.name || '')) return;
     await patchLead({ name: value });
+  };
+
+  const handleDeleteLead = async () => {
+    if (deletingLead) return;
+    const label = lead.name || lead.phone;
+    if (!window.confirm(`Удалить лида «${label}»? Вместе с ним удалятся его задачи и заметки. Действие необратимо.`)) return;
+    setDeletingLead(true);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        onLeadDeleted?.(lead.id);
+        onClose();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Ошибка удаления: ${err.error || res.status}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка сети');
+    } finally {
+      setDeletingLead(false);
+    }
   };
 
   const handleAddOwner = async () => {
@@ -593,6 +618,22 @@ export function LeadDetailPanel({ lead, niches, owners, onClose, onLeadUpdated, 
                 )}
               </div>
             ))}
+          </div>
+
+          <div className="lead-panel-section">
+            <button
+              className="btn"
+              onClick={handleDeleteLead}
+              disabled={deletingLead}
+              style={{
+                width: '100%',
+                color: '#ef4444',
+                border: '1px solid #ef4444',
+                backgroundColor: 'transparent'
+              }}
+            >
+              {deletingLead ? 'Удаляю...' : '🗑️ Удалить лида'}
+            </button>
           </div>
         </div>
       </div>
