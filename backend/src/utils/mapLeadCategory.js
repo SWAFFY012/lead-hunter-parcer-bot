@@ -34,6 +34,22 @@ export function hasActiveMapLeadCategoryFilter(filters) {
   return include.length > 0 || exclude.length > 0;
 }
 
+// Ищем слово целиком, а не подстроку: иначе стоп-слово «бар» отсекает
+// «Barracuda Detailing», а «мойка» не находится в «автомойке». Поэтому
+// разрешающие слова ищем подстрокой, а стоп-слова — по границе слова.
+function containsWord(haystack, needle) {
+  let from = 0;
+  for (;;) {
+    const at = haystack.indexOf(needle, from);
+    if (at < 0) return false;
+    const before = at === 0 ? '' : haystack[at - 1];
+    const after = haystack[at + needle.length] || '';
+    const isLetter = (ch) => ch !== '' && /[0-9a-zA-Zа-яё]/.test(ch);
+    if (!isLetter(before) && !isLetter(after)) return true;
+    from = at + 1;
+  }
+}
+
 // Возвращает причину отказа или null, если карточка проходит.
 // Стоп-слова сильнее разрешающих: «Oto Yıkama & Kuaför» — это парикмахерская
 // с мойкой, а не детейлинг-студия.
@@ -47,7 +63,7 @@ export function checkMapLeadCategory(lead, filters) {
 
   for (const word of exclude) {
     const needle = toHaystack(word);
-    if (needle && haystack.includes(needle)) return `стоп-слово «${word}»`;
+    if (needle && containsWord(haystack, needle)) return `стоп-слово «${word}»`;
   }
 
   if (!include.length) return null;

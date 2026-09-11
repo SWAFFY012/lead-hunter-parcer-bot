@@ -1,3 +1,5 @@
+import { normalizeMapLeadCategoryFilter } from './mapLeadCategory.js';
+
 const presenceValues = new Set(['all', 'with', 'without']);
 const socialPlatformValues = new Set(['all', 'telegram']);
 
@@ -56,12 +58,17 @@ export function matchesMapLeadRating(lead, minRating) {
 }
 
 export function normalizeMapLeadFilters(filters = {}) {
+  const category = normalizeMapLeadCategoryFilter(filters);
   return {
     website: normalizePresence(filters.website),
     phone: normalizePresence(filters.phone),
     socials: normalizePresence(filters.socials),
     socialPlatform: normalizeSocialPlatform(filters.socialPlatform),
     minRating: normalizeMinRating(filters.minRating),
+    // Списки целевых слов переживают нормализацию: парсер прогоняет через неё
+    // фильтры повторно, и раньше отсев по рубрике здесь терялся.
+    includeKeywords: category.include,
+    excludeKeywords: category.exclude,
   };
 }
 
@@ -84,6 +91,9 @@ export function matchesMapLeadPresenceFilters(card, filters) {
 }
 
 export function hasActiveMapLeadFilters(filters) {
-  const { minRating, ...presence } = normalizeMapLeadFilters(filters);
-  return minRating > 0 || Object.values(presence).some((value) => value !== 'all');
+  const { minRating, includeKeywords, excludeKeywords, ...presence } = normalizeMapLeadFilters(filters);
+  return minRating > 0
+    || includeKeywords.length > 0
+    || excludeKeywords.length > 0
+    || Object.values(presence).some((value) => value !== 'all');
 }

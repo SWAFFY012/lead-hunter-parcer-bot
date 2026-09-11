@@ -147,6 +147,17 @@ export async function startGoogleMapsParsing(options) {
       type: 'info',
     });
 
+    // Видно сразу, включён ли отсев: без этой строки промах по настройке
+    // выглядит так же, как сломанный фильтр.
+    const categoryFilterOn = hasActiveMapLeadCategoryFilter(filters);
+    io.emit('parser:log', {
+      platform: 'google_maps',
+      message: categoryFilterOn
+        ? `Отсев по виду деятельности включён: целевых слов ${filters.includeKeywords.length}, стоп-слов ${filters.excludeKeywords.length}.`
+        : 'Отсев по виду деятельности выключен: сохраняем все компании из выдачи. Выберите «Вид деятельности» перед запуском.',
+      type: categoryFilterOn ? 'info' : 'warn',
+    });
+
     for (let scrollIndex = 0; matchedCount < targetCount; scrollIndex++) {
       if (shouldStop) break;
       const feedLinks = await page.evaluate(() => Array.from(document.querySelectorAll('a[href*="/maps/place/"]')).map((link) => link.href));
