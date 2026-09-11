@@ -290,6 +290,8 @@ body {
 .maps-filter-settings { margin-top: 14px; padding: 12px; border: 1px solid #dbe4ef; border-radius: 6px; }
 .maps-filter-settings label { flex: 1; }
 .maps-filter-settings select { width: 100%; }
+.maps-filter-settings input[type="text"] { width: 100%; padding: 6px 8px; border: 1px solid #dbe4ef; border-radius: 4px; font: inherit; }
+.maps-filter-settings .maps-filter-wide { flex: 2 1 240px; }
 .maps-result-actions { min-height: 58px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-block: 1px solid #e2e8f0; background: #f8fafc; }
 .maps-result-actions span { color: #64748b; font-size: 11px; }
 .maps-action-buttons { display: flex; align-items: center; gap: 8px; }

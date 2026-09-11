@@ -8,6 +8,7 @@ import { getProfile, buildContextOptions, applyFingerprintScripts } from '../fin
 import { collectSocialLinks, crawlWebsiteSocialLinks, mergeSocialLinks } from '../../utils/socialExtractor.js';
 import { matchesMapLeadFilters, normalizeMapLeadFilters, shouldCrawlMapLeadWebsiteSocials } from '../../utils/mapLeadFilter.js';
 import { isMapLeadAlreadyTaken, rememberMapLead } from '../../utils/mapLeadCache.js';
+import { checkMapLeadCategory, hasActiveMapLeadCategoryFilter } from '../../utils/mapLeadCategory.js';
 import { normalizePhone, DEFAULT_REGION } from '../../utils/phoneNormalizer.js';
 import {
   finishMapParserRun,
@@ -105,10 +106,11 @@ export async function startGoogleMapsParsing(options) {
     io.emit('parser:log', { platform: 'google_maps', message: `Открываем Google Карты: ${url}`, type: 'info' });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-    // A clean browser profile may receive a Google consent screen first.
-    await page.getByRole('button', { name: /Принять все|Accept all|I agree|Согласен/i })
+    // Чистый профиль сначала получает экран согласия, и на турецкой выдаче
+    // кнопка называется «Tümünü kabul et». Без клика список результатов пуст.
+    await page.getByRole('button', { name: /Принять все|Accept all|I agree|Согласен|Tümünü kabul|Kabul et/i })
       .first()
-      .click({ timeout: 3000 })
+      .click({ timeout: 5000 })
       .then(() => page.waitForLoadState('domcontentloaded'))
       .catch(() => {});
 
@@ -136,6 +138,7 @@ export async function startGoogleMapsParsing(options) {
     let matchedCount = 0;
     let candidatesChecked = 0;
     let duplicatesSkipped = 0;
+    let offTargetSkipped = 0;
     let consecutiveEmptyScrolls = 0;
 
     io.emit('parser:log', {
@@ -177,9 +180,12 @@ export async function startGoogleMapsParsing(options) {
           const nameEl = document.querySelector('h1');
           const name = nameEl ? nameEl.innerText.trim() : '';
           
-          // The category is usually a button below the rating
-          const categoryBtn = document.querySelector('button[jsaction="pane.rating.category"]');
-          const title = categoryBtn ? categoryBtn.innerText.trim() : '';
+          // Рубрика компании. Селектор pane.rating.category из старой вёрстки
+          // Карт больше ничего не находит, рабочие варианты проверены на выдаче.
+          const categoryEl = document.querySelector('button[jsaction*="category"]')
+            || document.querySelector('.DkEaL')
+            || document.querySelector('button[jsaction="pane.rating.category"]');
+          const title = categoryEl ? categoryEl.innerText.trim() : '';
           
           // Phones usually have data-item-id starting with 'phone:tel:'
           let phone = '';
@@ -251,6 +257,28 @@ export async function startGoogleMapsParsing(options) {
         };
         await rememberMapLead(lead);
         candidatesChecked++;
+
+        // Карты подмешивают соседей по местности: по «detailing» приходят
+        // прачечные и ковровые лавки. Отсеиваем до сохранения и пишем причину,
+        // чтобы список целевых слов можно было донастроить по журналу.
+        const offTarget = checkMapLeadCategory(lead, filters);
+        if (offTarget) {
+          offTargetSkipped++;
+          io.emit('parser:log', {
+            platform: 'google_maps',
+            message: `Не целевая: ${name} — ${offTarget}`,
+            type: 'info',
+          });
+          if (db && taskId) {
+            await db`
+              INSERT INTO google_visited_places (place_id, task_id)
+              VALUES (${placeId}, ${taskId})
+              ON CONFLICT DO NOTHING
+            `;
+          }
+          continue;
+        }
+
         const isMatch = matchesMapLeadFilters(lead, filters);
         if (isMatch) {
           matchedCount++;
@@ -335,8 +363,8 @@ export async function startGoogleMapsParsing(options) {
     io.emit('parser:log', {
       platform: 'google_maps',
       message: matchedCount >= targetCount
-        ? `Готово: найдено ${matchedCount} новых подходящих компаний, пропущено из памяти ${duplicatesSkipped}.`
-        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount} новых подходящих компаний, проверено ${candidatesChecked}, пропущено из памяти ${duplicatesSkipped}.`,
+        ? `Готово: найдено ${matchedCount} новых подходящих компаний, отсеяно не целевых ${offTargetSkipped}, пропущено из памяти ${duplicatesSkipped}.`
+        : `Выдача закончилась: найдено ${matchedCount} из ${targetCount} новых подходящих компаний, проверено ${candidatesChecked}, отсеяно не целевых ${offTargetSkipped}, пропущено из памяти ${duplicatesSkipped}.`,
       type: finishType,
     });
 

@@ -26,6 +26,13 @@ interface MapLead {
   agreementStatus?: 'green' | 'red' | null;
 }
 
+interface CategoryPreset {
+  value: string;
+  label: string;
+  includeKeywords: string[];
+  excludeKeywords: string[];
+}
+
 type PresenceFilter = 'all' | 'with' | 'without';
 type SocialPlatformFilter = 'all' | 'telegram';
 type MapsProvider = 'google' | 'yandex' | 'twoGis';
@@ -201,6 +208,9 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   const [agreementUpdating, setAgreementUpdating] = useState<Set<string>>(() => new Set());
   const [agreementMenuKey, setAgreementMenuKey] = useState('');
   const [region, setRegion] = useState(() => localStorage.getItem(`${config.storage}_region`) || 'RU');
+  const [categoryPreset, setCategoryPreset] = useState(() => localStorage.getItem(`${config.storage}_category_preset`) || '');
+  const [excludeKeywords, setExcludeKeywords] = useState(() => localStorage.getItem(`${config.storage}_exclude_keywords`) || '');
+  const [categoryPresets, setCategoryPresets] = useState<CategoryPreset[]>([]);
   const [niches, setNiches] = useState<string[]>([]);
   const [lastImportNiche, setLastImportNiche] = useState<string | null>(null);
   const [selectedNiche, setSelectedNiche] = useState(() => localStorage.getItem(`${config.storage}_niche`) || '');
@@ -216,7 +226,11 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
       .then((response) => response.json())
       .then((data: { owners?: string[] }) => setOwners(data.owners || []))
       .catch(() => {});
-  }, []);
+    fetch(`${api}/category-presets`)
+      .then((response) => response.json())
+      .then((data: { presets?: CategoryPreset[] }) => setCategoryPresets(data.presets || []))
+      .catch(() => {});
+  }, [api]);
 
   useEffect(() => {
     localStorage.setItem(`${config.storage}_niche`, selectedNiche);
@@ -225,6 +239,11 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
   useEffect(() => {
     localStorage.setItem(`${config.storage}_region`, region);
   }, [config.storage, region]);
+
+  useEffect(() => {
+    localStorage.setItem(`${config.storage}_category_preset`, categoryPreset);
+    localStorage.setItem(`${config.storage}_exclude_keywords`, excludeKeywords);
+  }, [categoryPreset, config.storage, excludeKeywords]);
 
   useEffect(() => {
     localStorage.setItem(`${config.storage}_owner`, selectedOwner);
@@ -352,6 +371,8 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
           targetCount,
           region,
           niche: selectedNiche || null,
+          categoryPreset: categoryPreset || null,
+          excludeKeywords,
           filters: {
             website: websiteFilter,
             phone: phoneFilter,
@@ -607,8 +628,11 @@ export function MapsParser({ provider }: { provider: MapsProvider }) {
               <label>Рейтинг<select value={minRatingFilter} onChange={(event) => setMinRatingFilter(event.target.value)} disabled={loading}><option value="0">Неважно</option><option value="3">От 3.0 ★</option><option value="3.5">От 3.5 ★</option><option value="4">От 4.0 ★</option><option value="4.5">От 4.5 ★</option></select></label>
               <label>Страна<select value={region} onChange={(event) => setRegion(event.target.value)} disabled={loading}><option value="RU">Россия (+7)</option><option value="TR">Турция (+90)</option></select></label>
               <label>Воронка<select value={selectedNiche} onChange={(event) => setSelectedNiche(event.target.value)} disabled={loading}><option value="">Без ниши</option>{niches.map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
+              <label>Вид деятельности<select value={categoryPreset} onChange={(event) => setCategoryPreset(event.target.value)} disabled={loading}><option value="">Любой (без отсева)</option>{categoryPresets.map((preset) => <option key={preset.value} value={preset.value}>{preset.label}</option>)}</select></label>
+              <label className="maps-filter-wide">Исключить слова<input type="text" value={excludeKeywords} onChange={(event) => setExcludeKeywords(event.target.value)} disabled={loading} placeholder="например: аренда, прокат" /></label>
             </div>
             <div className="maps-server-filter-note"><b>Страна и воронка задаются до запуска</b><span>Найденные компании сразу сохраняются в выбранную воронку, номер приводится к международному формату.</span></div>
+            <div className="maps-server-filter-note"><b>Отсев не целевых</b><span>Карты подмешивают в выдачу соседей: по запросу «детейлинг» приходят прачечные и ковровые лавки. Выберите вид деятельности — такие карточки не попадут в воронку, а причина отказа будет видна в журнале.</span></div>
 
             {loading ? <button type="button" className="btn btn-secondary maps-start" onClick={stopParsing}>Остановить сбор</button> : <button className="btn btn-primary maps-start">Найти {targetCount} {companyWord(targetCount)}</button>}
             {loading ? <div className="maps-progress"><span style={{ width: `${progressPercent}%` }} /><small>Подходит {progress.matched} из {progress.target} · проверено карточек: {progress.checked}</small></div> : null}
