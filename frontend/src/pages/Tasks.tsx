@@ -214,7 +214,7 @@ function MonthGrid({ cursor, tasks, onDayClick, onTaskClick }: {
   const todayStr = fmtDate(new Date());
 
   return (
-    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+    <div className="card" style={{ padding: 0, overflow: 'hidden', flexShrink: 0 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid var(--color-border-weak)' }}>
         {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(d => (
           <div key={d} style={{ padding: '8px', textAlign: 'center', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-tertiary)' }}>{d}</div>
@@ -291,7 +291,7 @@ function TimeGrid({ view, cursor, tasks, onSlotClick, onTaskClick, loading }: {
   };
 
   return (
-    <div className="card" style={{ padding: 0, display: 'flex', overflow: 'hidden' }}>
+    <div className="card" style={{ padding: 0, display: 'flex', overflow: 'hidden', flexShrink: 0 }}>
       <div style={{ width: '56px', flexShrink: 0, borderRight: '1px solid var(--color-border-weak)' }}>
         <div style={{ height: '36px', borderBottom: '1px solid var(--color-border-weak)' }} />
         {Array.from({ length: SLOTS_PER_DAY }).map((_, i) => (
