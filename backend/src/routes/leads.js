@@ -5,6 +5,18 @@ const router = Router();
 const DEFAULT_NICHES = ['Авто', 'Стройка', 'Адвокаты', 'Агентство недвижимости', 'Банкротство'];
 const DEFAULT_OWNERS = ['Сергей', 'Александр'];
 
+// Колонки воронки. Раньше список был зашит в коде фронтенда, поэтому добавить
+// стадию или переименовать её можно было только правкой исходников и деплоем.
+const DEFAULT_STAGES = [
+  { id: 'new', title: 'New', color: '#64748B' },
+  { id: 'call', title: 'Недозвон', color: '#7C3AED' },
+  { id: 'interested', title: 'Интерес', color: '#F59E0B' },
+  { id: 'meeting_scheduled', title: 'Встреча назначена', color: '#0EA5E9' },
+  { id: 'meeting_done', title: 'Встреча проведена', color: '#6366F1' },
+  { id: 'rework', title: 'Доработать', color: '#F59E0B' },
+  { id: 'deal', title: 'Сделка', color: '#22C55E' },
+];
+
 function parseLeadTags(lead) {
   if (!lead) return lead;
   let tags = lead.tags;
@@ -146,6 +158,72 @@ router.get('/niches', async (_req, res) => {
 
     const all = Array.from(new Set([...presets, ...used]));
     res.json({ niches: all, presets });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET колонки воронки
+router.get('/stages', async (_req, res) => {
+  try {
+    const db = getDb();
+    const raw = await getSetting('pipeline_stages');
+    let stages = [];
+    if (raw) {
+      try { stages = JSON.parse(raw); } catch { stages = []; }
+    }
+    if (!Array.isArray(stages) || stages.length === 0) stages = DEFAULT_STAGES;
+
+    // Лид со статусом вне списка иначе пропал бы с доски: показываем его
+    // в отдельной колонке, чтобы карточку можно было перетащить куда нужно.
+    const rows = await db`SELECT DISTINCT status FROM leads WHERE status IS NOT NULL AND status <> ''`;
+    const known = new Set(stages.map(stage => stage.id));
+    const orphans = rows
+      .map(row => row.status)
+      .filter(status => !known.has(status))
+      .map(status => ({ id: status, title: status, color: '#94A3B8', orphan: true }));
+
+    res.json({ stages: [...stages, ...orphans] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT сохранить колонки воронки (порядок, названия, цвета)
+router.put('/stages', async (req, res) => {
+  try {
+    const { stages } = req.body;
+    if (!Array.isArray(stages)) return res.status(400).json({ error: 'stages must be an array' });
+    if (stages.length === 0) return res.status(400).json({ error: 'нужна хотя бы одна колонка' });
+
+    const seen = new Set();
+    const cleaned = [];
+    for (const stage of stages) {
+      const id = String(stage?.id || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      const title = String(stage?.title || '').trim();
+      if (!id || !title || seen.has(id)) continue;
+      seen.add(id);
+      cleaned.push({ id, title, color: String(stage?.color || '#64748B').trim() });
+    }
+    if (cleaned.length === 0) return res.status(400).json({ error: 'нет корректных колонок' });
+
+    await setSetting('pipeline_stages', JSON.stringify(cleaned));
+    res.json({ stages: cleaned });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT перенести лиды одной стадии в другую — нужно перед удалением колонки
+router.put('/stages/move', async (req, res) => {
+  try {
+    const db = getDb();
+    const from = String(req.body?.from || '').trim();
+    const to = String(req.body?.to || '').trim();
+    if (!from || !to) return res.status(400).json({ error: 'нужны from и to' });
+
+    const rows = await db`UPDATE leads SET status = ${to} WHERE status = ${from} RETURNING id`;
+    res.json({ moved: rows.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
