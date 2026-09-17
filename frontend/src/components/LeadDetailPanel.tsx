@@ -38,11 +38,11 @@ interface LeadTask {
 
 const STATUS_LABELS: Record<string, string> = {
   new: 'New',
-  call: 'Звонок',
+  call: 'Недозвон',
   interested: 'Интерес',
   meeting_scheduled: 'Встреча назначена',
   meeting_done: 'Встреча проведена',
-  proposal: 'КП',
+  rework: 'Доработать',
   deal: 'Сделка'
 };
 

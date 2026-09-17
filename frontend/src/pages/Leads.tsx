@@ -57,11 +57,11 @@ const TASK_TYPE_COLORS: Record<string, string> = { call: '#3b82f6', meeting: '#f
 
 const STATUS_LABELS: Record<string, string> = {
   new: 'New',
-  call: 'Звонок',
+  call: 'Недозвон',
   interested: 'Интерес',
   meeting_scheduled: 'Встреча назначена',
   meeting_done: 'Встреча проведена',
-  proposal: 'КП',
+  rework: 'Доработать',
   deal: 'Сделка'
 };
 
@@ -71,7 +71,7 @@ const STATUS_CLASSES: Record<string, string> = {
   interested: 'badge-online',
   meeting_scheduled: 'badge-replied',
   meeting_done: 'badge-replied',
-  proposal: 'badge-sent',
+  rework: 'badge-sent',
   deal: 'badge-online'
 };
 

@@ -52,7 +52,7 @@ export async function runMigrations() {
     `;
     await db`
       ALTER TABLE leads ADD CONSTRAINT leads_status_check
-      CHECK (status IN ('new','ai_ready','reaction_sent','message_sent','ready_to_send','sent','invalid_number','failed','replied','interested','deal','refused','contact','call','meeting_scheduled','meeting_done','proposal'))
+      CHECK (status IN ('new','ai_ready','reaction_sent','message_sent','ready_to_send','sent','invalid_number','failed','replied','interested','deal','refused','contact','call','meeting_scheduled','meeting_done','proposal','rework'))
     `;
 
     // Ручное добавление лидов: помечаем источник, чтобы отличать от парсера

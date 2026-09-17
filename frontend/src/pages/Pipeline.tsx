@@ -19,11 +19,11 @@ interface Lead {
 
 const COLUMNS = [
   { id: 'new', title: 'New', color: '#64748B' },
-  { id: 'call', title: 'Звонок', color: '#7C3AED' },
+  { id: 'call', title: 'Недозвон', color: '#7C3AED' },
   { id: 'interested', title: 'Интерес', color: 'var(--color-warning)' },
   { id: 'meeting_scheduled', title: 'Встреча назначена', color: '#0EA5E9' },
   { id: 'meeting_done', title: 'Встреча проведена', color: '#6366F1' },
-  { id: 'proposal', title: 'КП', color: '#F59E0B' },
+  { id: 'rework', title: 'Доработать', color: '#F59E0B' },
   { id: 'deal', title: 'Сделка', color: 'var(--color-success)' },
 ];
 
