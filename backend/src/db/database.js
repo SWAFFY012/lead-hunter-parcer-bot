@@ -4,6 +4,7 @@
  */
 import 'dotenv/config';
 import postgres from 'postgres';
+import { fileURLToPath } from 'url';
 
 const CONNECTION_STRING = process.env.SUPABASE_DB_URL;
 
@@ -35,6 +36,9 @@ export function getDb() {
 export async function runMigrations() {
   const db = getDb();
   try {
+    // Базовые таблицы: на пустой базе (новый Supabase-проект) их ещё нет
+    await db.file(fileURLToPath(new URL('./schema.postgres.sql', import.meta.url)));
+
     // Add reaction_timestamp column for Instagram workflow if not exists
     await db`
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS reaction_timestamp TIMESTAMPTZ
