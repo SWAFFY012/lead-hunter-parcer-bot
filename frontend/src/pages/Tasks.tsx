@@ -4,9 +4,11 @@ import { get, post, patch, del } from '../lib/api';
 
 interface Task {
   id: number;
-  lead_id: number;
+  lead_id: number | null;
   lead_name: string;
   lead_phone: string;
+  contact_name: string | null;
+  contact_phone: string | null;
   company_name: string;
   type: 'call' | 'meeting';
   due_date: string;
@@ -17,12 +19,6 @@ interface Task {
   status: 'pending' | 'done' | 'cancelled';
   created_at: string;
   done_at: string | null;
-}
-
-interface LeadOption {
-  id: number;
-  name: string;
-  phone: string;
 }
 
 const TYPE_MAP: Record<string, [string, string]> = {
@@ -59,7 +55,6 @@ export function Tasks() {
   const [view, setView] = useState<'day' | 'week' | 'month'>('week');
   const [cursor, setCursor] = useState(new Date());
   const [taskList, setTaskList] = useState<Task[]>([]);
-  const [leads, setLeads] = useState<LeadOption[]>([]);
   const [modalTask, setModalTask] = useState<Partial<Task> | null>(null);
   const [loading, setLoading] = useState(false);
   const [overdueCount, setOverdueCount] = useState(0);
@@ -105,9 +100,11 @@ export function Tasks() {
   }, []);
 
   useEffect(() => { fetchTasks(); fetchOverdue(); }, [fetchTasks, fetchOverdue]);
-  useEffect(() => {
-    get<{ leads: LeadOption[] }>('/leads?limit=100000').then(d => setLeads(d.leads || [])).catch(() => {});
-  }, []);
+  // Задача с лидом ведёт в карточку лида, ручная (без лида) — открывает редактирование
+  const openTask = (t: Task) => {
+    if (t.lead_id) navigate(`/leads?lead_id=${t.lead_id}`);
+    else setModalTask(t);
+  };
 
   const shift = (delta: number) => {
     const d = new Date(cursor);
@@ -183,16 +180,15 @@ export function Tasks() {
 
       <div className="page-body" style={{ overflow: 'auto' }}>
         {view === 'month' ? (
-          <MonthGrid cursor={cursor} tasks={taskList} onDayClick={(d) => { setCursor(new Date(d)); setView('day'); }} onTaskClick={(t) => navigate(`/leads?lead_id=${t.lead_id}`)} />
+          <MonthGrid cursor={cursor} tasks={taskList} onDayClick={(d) => { setCursor(new Date(d)); setView('day'); }} onTaskClick={openTask} />
         ) : (
-          <TimeGrid view={view} cursor={cursor} tasks={taskList} onSlotClick={openNewTask} onTaskClick={(t) => navigate(`/leads?lead_id=${t.lead_id}`)} loading={loading} />
+          <TimeGrid view={view} cursor={cursor} tasks={taskList} onSlotClick={openNewTask} onTaskClick={openTask} loading={loading} />
         )}
       </div>
 
       {modalTask && (
         <TaskModal
           task={modalTask}
-          leads={leads}
           onClose={() => setModalTask(null)}
           onSave={saveTask}
           onDelete={modalTask.id ? () => deleteTask(modalTask.id as number) : undefined}
@@ -360,20 +356,23 @@ function TimeGrid({ view, cursor, tasks, onSlotClick, onTaskClick, loading }: {
   );
 }
 
-function TaskModal({ task, leads, onClose, onSave, onDelete }: {
-  task: Partial<Task>; leads: LeadOption[]; onClose: () => void;
+function TaskModal({ task, onClose, onSave, onDelete }: {
+  task: Partial<Task>; onClose: () => void;
   onSave: (t: Partial<Task>) => void; onDelete?: () => void;
 }) {
-  const [form, setForm] = useState<Partial<Task>>(task);
-  const [leadSearch, setLeadSearch] = useState('');
+  const [form, setForm] = useState<Partial<Task>>({
+    ...task,
+    // для ручных задач имя/телефон редактируются в contact_*
+    contact_name: task.contact_name ?? '',
+    contact_phone: task.contact_phone ?? '',
+  });
   const [saving, setSaving] = useState(false);
 
-  const filteredLeads = leadSearch
-    ? leads.filter(l => (l.name || '').toLowerCase().includes(leadSearch.toLowerCase()) || (l.phone || '').includes(leadSearch))
-    : leads.slice(0, 30);
-
   const handleSave = async () => {
-    if (!form.lead_id || !form.due_date) { alert('Выберите лида и дату'); return; }
+    if (!form.due_date) { alert('Выберите дату'); return; }
+    if (!form.lead_id && !(form.contact_name || '').trim() && !(form.contact_phone || '').trim()) {
+      alert('Укажите имя или телефон'); return;
+    }
     setSaving(true);
     try { await onSave(form); } finally { setSaving(false); }
   };
@@ -409,26 +408,27 @@ function TaskModal({ task, leads, onClose, onSave, onDelete }: {
             ))}
           </div>
 
-          <div>
-            <label className="form-label">Лид</label>
-            {form.id ? (
+          {form.lead_id ? (
+            <div>
+              <label className="form-label">Лид</label>
               <div className="card" style={{ padding: '10px 12px', backgroundColor: 'var(--color-bg)', boxShadow: 'none' }}>
                 <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>{form.lead_name || 'Без имени'}</div>
                 {form.lead_phone && <div className="text-sm text-secondary">{form.lead_phone}</div>}
                 {form.company_name && <div className="text-xs text-tertiary" style={{ marginTop: '2px' }}>{form.company_name}</div>}
               </div>
-            ) : (
-              <>
-                <input className="form-input" placeholder="Поиск лида по имени/телефону..." value={leadSearch} onChange={e => setLeadSearch(e.target.value)} />
-                <select className="form-select" style={{ marginTop: '6px' }} value={form.lead_id || ''} onChange={e => setForm({ ...form, lead_id: Number(e.target.value) })}>
-                  <option value="">Выберите лида</option>
-                  {filteredLeads.map(l => (
-                    <option key={l.id} value={l.id}>{l.name || 'Без имени'} — {l.phone}</option>
-                  ))}
-                </select>
-              </>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Имя</label>
+                <input className="form-input" placeholder="Имя" value={form.contact_name || ''} onChange={e => setForm({ ...form, contact_name: e.target.value })} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Телефон</label>
+                <input className="form-input" type="tel" placeholder="+7..." value={form.contact_phone || ''} onChange={e => setForm({ ...form, contact_phone: e.target.value })} />
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-2">
             <div style={{ flex: 1 }}>
@@ -446,7 +446,7 @@ function TaskModal({ task, leads, onClose, onSave, onDelete }: {
           </div>
 
           <div>
-            <label className="form-label">Заметка</label>
+            <label className="form-label">Комментарий</label>
             <textarea className="form-textarea" rows={2} value={form.note || ''} onChange={e => setForm({ ...form, note: e.target.value })} />
           </div>
 

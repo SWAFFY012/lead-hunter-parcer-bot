@@ -15,9 +15,12 @@ router.get('/', async (req, res) => {
     if (lead_id) conditions = db`${conditions} AND t.lead_id = ${lead_id}`;
 
     const rows = await db`
-      SELECT t.*, l.name AS lead_name, l.phone AS lead_phone, l.title AS company_name
+      SELECT t.*,
+        COALESCE(l.name, t.contact_name) AS lead_name,
+        COALESCE(l.phone, t.contact_phone) AS lead_phone,
+        l.title AS company_name
       FROM lead_tasks t
-      JOIN leads l ON l.id = t.lead_id
+      LEFT JOIN leads l ON l.id = t.lead_id
       WHERE ${conditions}
       ORDER BY t.due_date ASC, t.time_start ASC
     `;
@@ -31,17 +34,22 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const db = getDb();
-    const { lead_id, type, due_date, time_start, time_end, note } = req.body;
+    const { lead_id, contact_name, contact_phone, type, due_date, time_start, time_end, note } = req.body;
 
-    if (!lead_id) return res.status(400).json({ error: 'lead_id обязателен' });
     if (!due_date) return res.status(400).json({ error: 'due_date обязателен' });
 
-    const [lead] = await db`SELECT id FROM leads WHERE id = ${lead_id}`;
-    if (!lead) return res.status(404).json({ error: 'Лид не найден' });
+    const name = (contact_name || '').trim();
+    const phone = (contact_phone || '').trim();
+    if (!lead_id && !name && !phone) return res.status(400).json({ error: 'Укажите имя или телефон' });
+
+    if (lead_id) {
+      const [lead] = await db`SELECT id FROM leads WHERE id = ${lead_id}`;
+      if (!lead) return res.status(404).json({ error: 'Лид не найден' });
+    }
 
     const [task] = await db`
-      INSERT INTO lead_tasks (lead_id, type, due_date, time_start, time_end, note)
-      VALUES (${lead_id}, ${type || 'call'}, ${due_date}, ${time_start || null}, ${time_end || null}, ${note || null})
+      INSERT INTO lead_tasks (lead_id, contact_name, contact_phone, type, due_date, time_start, time_end, note)
+      VALUES (${lead_id || null}, ${name || null}, ${phone || null}, ${type || 'call'}, ${due_date}, ${time_start || null}, ${time_end || null}, ${note || null})
       RETURNING *
     `;
     res.status(201).json(task);
@@ -54,9 +62,11 @@ router.post('/', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     const db = getDb();
-    const { type, due_date, time_start, time_end, note, result, status } = req.body;
+    const { type, due_date, time_start, time_end, note, result, status, contact_name, contact_phone } = req.body;
     const updates = {};
 
+    if (contact_name !== undefined) updates.contact_name = (contact_name || '').trim() || null;
+    if (contact_phone !== undefined) updates.contact_phone = (contact_phone || '').trim() || null;
     if (type !== undefined) updates.type = type;
     if (due_date !== undefined) updates.due_date = due_date;
     if (time_start !== undefined) updates.time_start = time_start;

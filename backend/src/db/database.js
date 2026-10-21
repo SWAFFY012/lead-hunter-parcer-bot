@@ -88,6 +88,11 @@ export async function runMigrations() {
     await db`CREATE INDEX IF NOT EXISTS idx_lead_tasks_lead ON lead_tasks(lead_id)`;
     await db`CREATE INDEX IF NOT EXISTS idx_lead_tasks_due_date ON lead_tasks(due_date)`;
 
+    // Задачи не привязанные к лиду (ручной контакт: имя + телефон)
+    await db`ALTER TABLE lead_tasks ALTER COLUMN lead_id DROP NOT NULL`;
+    await db`ALTER TABLE lead_tasks ADD COLUMN IF NOT EXISTS contact_name TEXT`;
+    await db`ALTER TABLE lead_tasks ADD COLUMN IF NOT EXISTS contact_phone TEXT`;
+
     // Пометка лида зелёным (согласен) / красным (не согласен) — СРМ
     await db`
       ALTER TABLE leads ADD COLUMN IF NOT EXISTS agreement_status TEXT
