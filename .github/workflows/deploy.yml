@@ -1,0 +1,57 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Фронт собираем здесь: на сервере всего 1 ГБ памяти
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Prepare SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Update code and restart backend
+        run: |
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" bash -s <<'REMOTE'
+          set -euo pipefail
+          cd /opt/lead-hunter
+          old=$(git rev-parse HEAD)
+          git fetch --quiet origin main
+          git reset --hard origin/main
+          if ! git diff --quiet "$old" HEAD -- backend/package-lock.json; then
+            (cd backend && npm ci --no-audit --no-fund)
+          fi
+          sudo -n systemctl restart lead-hunter-backend
+          sleep 3
+          sudo -n systemctl is-active lead-hunter-backend
+          REMOTE
+
+      - name: Upload frontend build
+        run: |
+          rsync -az --delete -e "ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes" \
+            frontend/dist/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/lead-hunter/frontend/dist/"
